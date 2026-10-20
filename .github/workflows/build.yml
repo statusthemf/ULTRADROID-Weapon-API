@@ -1,17 +1,16 @@
 name: Build ULTRADROID Weapon API
 
-on:
-push:
-pull_request:
-workflow_dispatch:
+'on':
+push: {}
+pull_request: {}
+workflow_dispatch: {}
 
 jobs:
 build:
 runs-on: ubuntu-latest
-
 steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
+- name: Checkout repository
+uses: actions/checkout@v4
 
   - name: Install .NET
     uses: actions/setup-dotnet@v4
