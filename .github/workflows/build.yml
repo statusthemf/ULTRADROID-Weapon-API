@@ -1,4 +1,4 @@
-name: Build ULTRADROID Weapon API
+name: Weapon 7 Test Build
 
 'on':
 push: {}
@@ -8,20 +8,15 @@ workflow_dispatch: {}
 jobs:
 build:
 runs-on: ubuntu-latest
+
 steps:
-- name: Checkout repository
-uses: actions/checkout@v4
+  - name: Checkout repository
+    uses: actions/checkout@v4
 
   - name: Install .NET
     uses: actions/setup-dotnet@v4
     with:
       dotnet-version: '10.0.x'
-
-  - name: Build API
-    run: dotnet build src/ULTRADROID.Weapon.API/ULTRADROID.Weapon.API.csproj --configuration Release
-
-  - name: Build Core
-    run: dotnet build core/ULTRADROID.Weapon.Core/ULTRADROID.Weapon.Core.csproj --configuration Release
 
   - name: Build Weapon7Test
     run: dotnet build examples/Weapon7Test/Weapon7Test.csproj --configuration Release
