@@ -1,7 +1,7 @@
-
 using System;
 using System.Reflection;
 using BepInEx;
+using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.InteropTypes;
@@ -20,11 +20,9 @@ namespace ULTRADROID.Weapon7Test
         BepInDependency.DependencyFlags.HardDependency)]
     public sealed class Weapon7Plugin : BasePlugin
     {
-        internal static ManualLogSourceProxy Logger;
-
         public override void Load()
         {
-            Weapon7Runtime.Log = Log;
+            Weapon7Runtime.Log = new ManualLogSourceProxy(Log);
 
             try
             {
@@ -38,20 +36,29 @@ namespace ULTRADROID.Weapon7Test
         }
     }
 
-    // Small wrapper keeps the runtime logger independent of the plugin class.
     internal sealed class ManualLogSourceProxy
     {
-        private readonly BepInEx.Logging.ManualLogSource source;
+        private readonly ManualLogSource source;
 
-        internal ManualLogSourceProxy(
-            BepInEx.Logging.ManualLogSource value)
+        internal ManualLogSourceProxy(ManualLogSource value)
         {
             source = value;
         }
 
-        internal void Info(string message) => source.LogInfo(message);
-        internal void Warn(string message) => source.LogWarning(message);
-        internal void Error(string message) => source.LogError(message);
+        internal void Info(string message)
+        {
+            source.LogInfo(message);
+        }
+
+        internal void Warn(string message)
+        {
+            source.LogWarning(message);
+        }
+
+        internal void Error(string message)
+        {
+            source.LogError(message);
+        }
     }
 
     public sealed class Weapon7Runtime : MonoBehaviour
@@ -66,10 +73,15 @@ namespace ULTRADROID.Weapon7Test
         private int lastCheckFrame = -120;
         private bool buttonRegistered;
 
-        public Weapon7Runtime(IntPtr ptr) : base(ptr) { }
+        public Weapon7Runtime(IntPtr ptr) : base(ptr)
+        {
+        }
 
         public void Update()
         {
+            if (Log == null)
+                return;
+
             try
             {
                 string scene = SceneManager.GetActiveScene().name;
@@ -79,38 +91,42 @@ namespace ULTRADROID.Weapon7Test
 
                 RegisterButton();
 
-                if (Time.frameCount - lastCheckFrame >= 120)
+                if (Time.frameCount - lastCheckFrame < 120)
+                    return;
+
+                lastCheckFrame = Time.frameCount;
+
+                object found = Weapon7Helpers.FindGunControl();
+
+                if (found == null)
+                    return;
+
+                IntPtr pointer = Weapon7Helpers.GetPointer(found);
+
+                if (pointer == IntPtr.Zero)
+                    return;
+
+                if (pointer != lastGunPointer)
                 {
-                    lastCheckFrame = Time.frameCount;
+                    lastGunPointer = pointer;
+                    gunControl = found;
+                    testWeapon = null;
 
-                    object found = Weapon7Helpers.FindGunControl();
-
-                    if (found != null)
-                    {
-                        IntPtr pointer = Weapon7Helpers.GetPointer(found);
-
-                        if (pointer != lastGunPointer)
-                        {
-                            lastGunPointer = pointer;
-                            gunControl = found;
-                            testWeapon = null;
-
-                            Log.Info(
-                                "[Weapon7] Found GunControl: " +
-                                Weapon7Helpers.TypeName(found));
-                        }
-                        else
-                        {
-                            gunControl = found;
-                        }
-
-                        EnsureSlot7();
-                    }
+                    Log.Info(
+                        "[Weapon7] Found GunControl: " +
+                        Weapon7Helpers.TypeName(found));
                 }
+                else
+                {
+                    gunControl = found;
+                }
+
+                EnsureSlot7();
             }
             catch (Exception ex)
             {
-                Log.Error("[Weapon7] Runtime error: " + ex);
+                Log.Error("[Weapon7] Runtime error: " +
+                          Weapon7Helpers.Unwrap(ex));
             }
         }
 
@@ -118,8 +134,6 @@ namespace ULTRADROID.Weapon7Test
         {
             if (buttonRegistered)
                 return;
-
-            buttonRegistered = true;
 
             try
             {
@@ -133,11 +147,14 @@ namespace ULTRADROID.Weapon7Test
                     OnClick = SwitchToSlot7
                 });
 
+                buttonRegistered = true;
                 Log.Info("[Weapon7] W7 HUD button registered.");
             }
             catch (Exception ex)
             {
-                Log.Error("[Weapon7] Button registration failed: " + ex);
+                Log.Error(
+                    "[Weapon7] Button registration failed: " +
+                    Weapon7Helpers.Unwrap(ex));
             }
         }
 
@@ -152,25 +169,29 @@ namespace ULTRADROID.Weapon7Test
                     gunControl, "slots");
 
                 if (slots == null)
+                {
                     throw new InvalidOperationException(
-                        "GunControl.slots is null.");
+                        "GunControl.slots is null or could not be read.");
+                }
 
                 int slotCount = Weapon7Helpers.Count(slots);
 
                 if (slotCount < 6)
+                {
                     throw new InvalidOperationException(
-                        "The game's six original slots are not ready.");
+                        "The game's original six slots are not ready. " +
+                        "Current slot count: " + slotCount);
+                }
 
-                // Find an existing test weapon if the list was rebuilt.
                 object slot7 = slotCount >= 7
                     ? Weapon7Helpers.Item(slots, 6)
                     : null;
 
                 if (slot7 != null)
                 {
-                    for (int i = 0;
-                         i < Weapon7Helpers.Count(slot7);
-                         i++)
+                    int existingCount = Weapon7Helpers.Count(slot7);
+
+                    for (int i = 0; i < existingCount; i++)
                     {
                         GameObject item =
                             Weapon7Helpers.Item(slot7, i) as GameObject;
@@ -184,29 +205,49 @@ namespace ULTRADROID.Weapon7Test
                     }
                 }
 
-                // Create slot 7 only if the game's list has six entries.
                 if (slotCount < 7)
                 {
-                    Type innerListType =
-                        slots.GetType().GetGenericArguments()[0];
+                    Type slotsType = slots.GetType();
+                    Type[] genericArguments =
+                        slotsType.GetGenericArguments();
 
-                    object newSlot =
-                        Activator.CreateInstance(innerListType);
+                    if (genericArguments.Length != 1)
+                    {
+                        throw new InvalidOperationException(
+                            "Could not determine the slot-list element type: " +
+                            slotsType.FullName);
+                    }
+
+                    Type innerListType = genericArguments[0];
+
+                    object newSlot = Activator.CreateInstance(
+                        innerListType);
+
+                    if (newSlot == null)
+                    {
+                        throw new InvalidOperationException(
+                            "Could not create the seventh slot list.");
+                    }
 
                     Weapon7Helpers.Add(slots, newSlot);
                     slot7 = newSlot;
 
-                    Log.Info("[Weapon7] Added slot 7 to GunControl.slots.");
+                    Log.Info(
+                        "[Weapon7] Added slot 7 to GunControl.slots.");
                 }
 
                 if (slot7 == null)
                     slot7 = Weapon7Helpers.Item(slots, 6);
 
+                if (slot7 == null)
+                {
+                    throw new InvalidOperationException(
+                        "Slot 7 could not be retrieved after setup.");
+                }
+
                 if (testWeapon == null)
                 {
-                    // Use an existing weapon as a temporary test placeholder.
-                    GameObject template =
-                        FindTemplateWeapon(slots);
+                    GameObject template = FindTemplateWeapon(slots);
 
                     if (template == null)
                     {
@@ -217,11 +258,14 @@ namespace ULTRADROID.Weapon7Test
                     }
 
                     testWeapon = UnityEngine.Object.Instantiate(
-                        template, template.transform.parent);
+                        template,
+                        template.transform.parent);
 
                     if (testWeapon == null)
+                    {
                         throw new InvalidOperationException(
-                            "Could not clone a weapon.");
+                            "Could not clone the template weapon.");
+                    }
 
                     testWeapon.name = "ULTRADROID_TEST_WEAPON7";
                     testWeapon.SetActive(false);
@@ -234,31 +278,39 @@ namespace ULTRADROID.Weapon7Test
                 if (!Weapon7Helpers.Contains(slot7, testWeapon))
                     Weapon7Helpers.Add(slot7, testWeapon);
 
-                // Rebuild the game's weapon lookup and wheel data.
                 Weapon7Helpers.Invoke(
-                    gunControl, "UpdateWeaponList", false);
+                    gunControl,
+                    "UpdateWeaponList");
 
                 Log.Info(
-                    "[Weapon7] Slot 7 prepared. Total slots=" +
+                    "[Weapon7] Slot 7 prepared. Total slots = " +
                     Weapon7Helpers.Count(slots));
 
                 return true;
             }
             catch (Exception ex)
             {
-                Log.Error("[Weapon7] Slot setup failed: " +
-                          Weapon7Helpers.Unwrap(ex));
+                Log.Error(
+                    "[Weapon7] Slot setup failed: " +
+                    Weapon7Helpers.Unwrap(ex));
+
                 return false;
             }
         }
 
         private GameObject FindTemplateWeapon(object slots)
         {
-            int limit = Math.Min(6, Weapon7Helpers.Count(slots));
+            int limit = Math.Min(
+                6,
+                Weapon7Helpers.Count(slots));
 
             for (int i = 0; i < limit; i++)
             {
                 object slot = Weapon7Helpers.Item(slots, i);
+
+                if (slot == null)
+                    continue;
+
                 int count = Weapon7Helpers.Count(slot);
 
                 for (int j = 0; j < count; j++)
@@ -279,6 +331,9 @@ namespace ULTRADROID.Weapon7Test
 
         private void SwitchToSlot7()
         {
+            if (Log == null)
+                return;
+
             try
             {
                 object found = Weapon7Helpers.FindGunControl();
@@ -294,19 +349,25 @@ namespace ULTRADROID.Weapon7Test
 
                 if (!EnsureSlot7())
                 {
-                    Log.Warn("[Weapon7] Slot 7 is not ready yet.");
+                    Log.Warn(
+                        "[Weapon7] Slot 7 is not ready yet.");
                     return;
                 }
 
                 Weapon7Helpers.Invoke(
-                    gunControl, "SwitchWeapon", 7, false);
+                    gunControl,
+                    "SwitchWeapon",
+                    7,
+                    false);
 
-                Log.Info("[Weapon7] Requested SwitchWeapon(7, false).");
+                Log.Info(
+                    "[Weapon7] Requested SwitchWeapon(7, false).");
             }
             catch (Exception ex)
             {
-                Log.Error("[Weapon7] Switch failed: " +
-                          Weapon7Helpers.Unwrap(ex));
+                Log.Error(
+                    "[Weapon7] Switch failed: " +
+                    Weapon7Helpers.Unwrap(ex));
             }
         }
     }
@@ -329,7 +390,9 @@ namespace ULTRADROID.Weapon7Test
                     {
                         if (candidate != null &&
                             candidate.Name == name)
+                        {
                             return candidate;
+                        }
                     }
                 }
                 catch (ReflectionTypeLoadException ex)
@@ -341,10 +404,14 @@ namespace ULTRADROID.Weapon7Test
                     {
                         if (candidate != null &&
                             candidate.Name == name)
+                        {
                             return candidate;
+                        }
                     }
                 }
-                catch { }
+                catch
+                {
+                }
             }
 
             return null;
@@ -360,12 +427,15 @@ namespace ULTRADROID.Weapon7Test
             object found = UnityEngine.Object.FindObjectsOfType(
                 Il2CppType.From(type));
 
-            if (Count(found) == 0)
+            if (found == null || Count(found) == 0)
                 return null;
 
             object raw = Item(found, 0);
 
-            if (raw == null || type.IsInstanceOfType(raw))
+            if (raw == null)
+                return null;
+
+            if (type.IsInstanceOfType(raw))
                 return raw;
 
             Il2CppObjectBase native = raw as Il2CppObjectBase;
@@ -377,9 +447,18 @@ namespace ULTRADROID.Weapon7Test
                 BindingFlags.Instance |
                 BindingFlags.Public |
                 BindingFlags.NonPublic,
-                null, new[] { typeof(IntPtr) }, null);
+                null,
+                new[] { typeof(IntPtr) },
+                null);
 
-            return constructor?.Invoke(
+            if (constructor == null)
+            {
+                throw new MissingMethodException(
+                    type.FullName,
+                    ".ctor(IntPtr)");
+            }
+
+            return constructor.Invoke(
                 new object[] { native.Pointer });
         }
 
@@ -392,7 +471,9 @@ namespace ULTRADROID.Weapon7Test
                 : native.Pointer;
         }
 
-        internal static object GetMember(object instance, string name)
+        internal static object GetMember(
+            object instance,
+            string name)
         {
             if (instance == null)
                 return null;
@@ -441,16 +522,25 @@ namespace ULTRADROID.Weapon7Test
 
             object value = GetMember(collection, "Count");
 
-            return value == null ? 0 : Convert.ToInt32(value);
+            if (value == null)
+                return 0;
+
+            return Convert.ToInt32(value);
         }
 
-        internal static object Item(object collection, int index)
+        internal static object Item(
+            object collection,
+            int index)
         {
             if (collection == null || index < 0)
                 return null;
 
             if (collection is Array array)
-                return index < array.Length ? array.GetValue(index) : null;
+            {
+                return index < array.Length
+                    ? array.GetValue(index)
+                    : null;
+            }
 
             try
             {
@@ -461,15 +551,47 @@ namespace ULTRADROID.Weapon7Test
                     BindingFlags.NonPublic);
 
                 if (property != null)
+                {
                     return property.GetValue(
-                        collection, new object[] { index });
+                        collection,
+                        new object[] { index });
+                }
             }
-            catch { }
+            catch
+            {
+            }
+
+            try
+            {
+                foreach (MethodInfo method in collection.GetType().GetMethods(
+                             BindingFlags.Instance |
+                             BindingFlags.Public |
+                             BindingFlags.NonPublic))
+                {
+                    if (method.Name != "get_Item")
+                        continue;
+
+                    ParameterInfo[] parameters = method.GetParameters();
+
+                    if (parameters.Length == 1 &&
+                        parameters[0].ParameterType == typeof(int))
+                    {
+                        return method.Invoke(
+                            collection,
+                            new object[] { index });
+                    }
+                }
+            }
+            catch
+            {
+            }
 
             return null;
         }
 
-        internal static void Add(object collection, object value)
+        internal static void Add(
+            object collection,
+            object value)
         {
             if (collection == null)
                 throw new ArgumentNullException(nameof(collection));
@@ -479,31 +601,49 @@ namespace ULTRADROID.Weapon7Test
                          BindingFlags.Public |
                          BindingFlags.NonPublic))
             {
+                if (method.Name != "Add")
+                    continue;
+
                 ParameterInfo[] parameters = method.GetParameters();
 
-                if (method.Name != "Add" || parameters.Length != 1)
+                if (parameters.Length != 1)
                     continue;
+
+                Type expected = parameters[0].ParameterType;
 
                 if (value != null &&
-                    !parameters[0].ParameterType.IsInstanceOfType(value))
+                    !expected.IsInstanceOfType(value) &&
+                    expected != value.GetType())
+                {
                     continue;
+                }
 
-                method.Invoke(collection, new[] { value });
+                method.Invoke(
+                    collection,
+                    new[] { value });
+
                 return;
             }
 
             throw new MissingMethodException(
-                collection.GetType().FullName, "Add");
+                collection.GetType().FullName,
+                "Add");
         }
 
-        internal static bool Contains(object collection, GameObject target)
+        internal static bool Contains(
+            object collection,
+            GameObject target)
         {
             if (collection == null || target == null)
                 return false;
 
-            for (int i = 0; i < Count(collection); i++)
+            int count = Count(collection);
+
+            for (int i = 0; i < count; i++)
             {
-                GameObject item = Item(collection, i) as GameObject;
+                GameObject item = Item(
+                    collection,
+                    i) as GameObject;
 
                 if (item == target)
                     return true;
@@ -513,7 +653,9 @@ namespace ULTRADROID.Weapon7Test
         }
 
         internal static object Invoke(
-            object instance, string name, params object[] arguments)
+            object instance,
+            string name,
+            params object[] arguments)
         {
             if (instance == null)
                 throw new ArgumentNullException(nameof(instance));
@@ -541,7 +683,17 @@ namespace ULTRADROID.Weapon7Test
                     for (int i = 0; i < parameters.Length; i++)
                     {
                         if (arguments[i] == null)
+                        {
+                            if (parameters[i].ParameterType.IsValueType &&
+                                Nullable.GetUnderlyingType(
+                                    parameters[i].ParameterType) == null)
+                            {
+                                matches = false;
+                                break;
+                            }
+
                             continue;
+                        }
 
                         Type expected = parameters[i].ParameterType;
                         Type actual = arguments[i].GetType();
@@ -555,12 +707,17 @@ namespace ULTRADROID.Weapon7Test
                     }
 
                     if (matches)
-                        return method.Invoke(instance, arguments);
+                    {
+                        return method.Invoke(
+                            instance,
+                            arguments);
+                    }
                 }
             }
 
             throw new MissingMethodException(
-                instance.GetType().FullName, name);
+                instance.GetType().FullName,
+                name);
         }
 
         internal static string TypeName(object value)
