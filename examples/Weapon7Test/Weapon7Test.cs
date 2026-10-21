@@ -1,4 +1,3 @@
-
 using System;
 using System.Reflection;
 using BepInEx;
@@ -62,8 +61,6 @@ namespace ULTRADROID.Weapon7Test
         private bool slotSetupComplete;
         private bool refreshAttempted;
         private bool descriptorConfigured;
-
-        // New: only run the post-equip diagnostic once per setup.
         private bool postEquipDiagnosticsLogged;
 
         public Weapon7Runtime(IntPtr ptr) : base(ptr) { }
@@ -137,8 +134,6 @@ namespace ULTRADROID.Weapon7Test
                         EnsureSlot7();
                 }
 
-                // Check every frame after setup, not just every 120 frames.
-                // This lets us detect when the player actually equips W7.
                 if (slotSetupComplete)
                     CheckEquippedWeaponDiagnostics();
             }
@@ -295,7 +290,6 @@ namespace ULTRADROID.Weapon7Test
 
                     testWeapon.name = "ULTRADROID_TEST_WEAPON7";
 
-                    // Initial diagnostic: before the clone is equipped.
                     Weapon7Helpers.LogWeaponComponents(testWeapon, Log);
 
                     testWeapon.SetActive(false);
@@ -377,8 +371,6 @@ namespace ULTRADROID.Weapon7Test
             }
         }
 
-        // New: wait until W7 is actually selected, then allow 30 frames
-        // for OnEnable/Start/Update initialization before inspecting it.
         private void CheckEquippedWeaponDiagnostics()
         {
             if (postEquipDiagnosticsLogged ||
@@ -416,8 +408,6 @@ namespace ULTRADROID.Weapon7Test
             if (Time.frameCount - equippedSeenFrame < 30)
                 return;
 
-            // Set before logging to prevent repeated diagnostics if an
-            // inspection throws an exception.
             postEquipDiagnosticsLogged = true;
 
             Log.Info(
