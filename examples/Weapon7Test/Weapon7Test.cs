@@ -394,38 +394,119 @@ namespace ULTRADROID.Weapon7Test
                     lastInputSearchFrame = Time.frameCount;
                     cachedPlayerInput = null;
 
-                    Type inputType =
-                        Weapon7Helpers.FindType("PlayerInput");
+                    Type inputManagerType =
+                        Weapon7Helpers.FindType("InputManager");
 
-                    if (inputType == null)
-                        return;
-
-                    object inputs = UnityEngine.Object.FindObjectsOfType(
-                        Il2CppType.From(inputType));
-
-                    for (int i = 0; i < Weapon7Helpers.Count(inputs); i++)
+                    if (inputManagerType == null)
                     {
-                        object candidate =
-                            Weapon7Helpers.WrapForDiagnostics(
-                                inputType,
-                                Weapon7Helpers.Item(inputs, i));
+                        if (Time.frameCount - lastProbeWarningFrame >= 300)
+                        {
+                            lastProbeWarningFrame = Time.frameCount;
+                            Log.Warn("[Weapon7] InputManager type not found.");
+                        }
 
-                        if (candidate == null)
-                            continue;
-
-                        object fireAction =
-                            Weapon7Helpers.GetMember(candidate, "Fire1");
-
-                        if (fireAction == null)
-                            continue;
-
-                        cachedPlayerInput = candidate;
-                        break;
+                        return;
                     }
-                }
 
-                if (cachedPlayerInput == null)
-                    return;
+                    // Find MonoSingleton<InputManager> in the inheritance chain.
+                    Type singletonType = null;
+
+                    for (Type current = inputManagerType;
+                         current != null;
+                         current = current.BaseType)
+                    {
+                        if (current.IsGenericType &&
+                            current.GetGenericTypeDefinition().Name ==
+                                "MonoSingleton`1" &&
+                            current.GetGenericArguments().Length == 1 &&
+                            current.GetGenericArguments()[0] == inputManagerType)
+                        {
+                            singletonType = current;
+                            break;
+                        }
+                    }
+
+                    if (singletonType == null)
+                    {
+                        if (Time.frameCount - lastProbeWarningFrame >= 300)
+                        {
+                            lastProbeWarningFrame = Time.frameCount;
+                            Log.Warn(
+                                "[Weapon7] MonoSingleton<InputManager> not found.");
+                        }
+
+                        return;
+                    }
+
+                    // Locate the singleton Instance property, including inherited non-public members.
+                    PropertyInfo instanceProperty = null;
+
+                    for (Type current = singletonType;
+                         current != null && instanceProperty == null;
+                         current = current.BaseType)
+                    {
+                        instanceProperty = current.GetProperty(
+                            "Instance",
+                            BindingFlags.Public |
+                            BindingFlags.NonPublic |
+                            BindingFlags.Static |
+                            BindingFlags.DeclaredOnly);
+                    }
+
+                    if (instanceProperty == null)
+                    {
+                        if (Time.frameCount - lastProbeWarningFrame >= 300)
+                        {
+                            lastProbeWarningFrame = Time.frameCount;
+                            Log.Warn(
+                                "[Weapon7] InputManager.Instance property not found.");
+                        }
+
+                        return;
+                    }
+
+                    MethodInfo getter = instanceProperty.GetGetMethod(true);
+
+                    if (getter == null || !getter.IsStatic)
+                    {
+                        Log.Warn(
+                            "[Weapon7] InputManager.Instance has no static getter.");
+                        return;
+                    }
+
+                    object manager = getter.Invoke(null, null);
+
+                    if (manager == null)
+                    {
+                        if (Time.frameCount - lastProbeWarningFrame >= 300)
+                        {
+                            lastProbeWarningFrame = Time.frameCount;
+                            Log.Warn(
+                                "[Weapon7] InputManager.Instance is null.");
+                        }
+
+                        return;
+                    }
+
+                    // PlayerInput is a regular managed game object, not a component.
+                    cachedPlayerInput = Weapon7Helpers.GetMember(
+                        manager, "InputSource");
+
+                    if (cachedPlayerInput == null)
+                    {
+                        if (Time.frameCount - lastProbeWarningFrame >= 300)
+                        {
+                            lastProbeWarningFrame = Time.frameCount;
+                            Log.Warn(
+                                "[Weapon7] InputManager.InputSource is null.");
+                        }
+
+                        return;
+                    }
+
+                    Log.Info(
+                        "[Weapon7] Acquired PlayerInput through InputManager.Instance.");
+                }
 
                 object fire1 = Weapon7Helpers.GetMember(
                     cachedPlayerInput, "Fire1");
