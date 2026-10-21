@@ -710,6 +710,81 @@ namespace ULTRADROID.Weapon7Test
             }
         }
 
+        private void LogWeapon7Renderers(GameObject weapon)
+        {
+            if (weapon == null)
+            {
+                Log.Warn("[W7 COLOR] Weapon clone is null.");
+                return;
+            }
+
+            object renderers = Weapon7Helpers.Invoke(
+                weapon,
+                "GetComponentsInChildren",
+                Il2CppType.From(typeof(Renderer)),
+                true);
+
+            Log.Info(
+                "[W7 COLOR] Root=" + weapon.name +
+                ", renderers=" + Weapon7Helpers.Count(renderers));
+
+            Type getterType =
+                Weapon7Helpers.FindType("GunColorGetter");
+
+            for (int i = 0; i < Weapon7Helpers.Count(renderers); i++)
+            {
+                Renderer renderer =
+                    Weapon7Helpers.WrapForDiagnostics(
+                        typeof(Renderer),
+                        Weapon7Helpers.Item(renderers, i)) as Renderer;
+
+                if (renderer == null)
+                    continue;
+
+                object materials =
+                    Weapon7Helpers.GetMember(renderer, "sharedMaterials");
+
+                Log.Info(
+                    "[W7 COLOR] Renderer=" + renderer.name +
+                    ", active=" + renderer.gameObject.activeInHierarchy +
+                    ", materials=" + Weapon7Helpers.Count(materials));
+
+                for (int j = 0; j < Weapon7Helpers.Count(materials); j++)
+                {
+                    Material material =
+                        Weapon7Helpers.WrapForDiagnostics(
+                            typeof(Material),
+                            Weapon7Helpers.Item(materials, j)) as Material;
+
+                    if (material == null)
+                        continue;
+
+                    string shaderName = material.shader != null
+                        ? material.shader.name
+                        : "<null>";
+
+                    Log.Info(
+                        "[W7 COLOR] Material=" + material.name +
+                        ", shader=" + shaderName);
+                }
+
+                if (getterType != null)
+                {
+                    object getter = Weapon7Helpers.Invoke(
+                        renderer,
+                        "GetComponent",
+                        Il2CppType.From(getterType));
+
+                    if (getter != null)
+                    {
+                        Log.Info(
+                            "[W7 COLOR] GunColorGetter found on " +
+                            renderer.name);
+                    }
+                }
+            }
+        }
+
         private void CheckEquippedWeaponDiagnostics()
         {
             if (postEquipDiagnosticsLogged ||
@@ -779,6 +854,7 @@ namespace ULTRADROID.Weapon7Test
 
             Weapon7Helpers.LogWeaponComponents(testWeapon, Log);
             Weapon7Helpers.LogRevolverRuntimeState(testWeapon, Log);
+            LogWeapon7Renderers(testWeapon);
 
             Log.Info(
                 "[Weapon7] ===== END POST-EQUIP DIAGNOSTICS =====");
