@@ -1445,10 +1445,35 @@ namespace ULTRADROID.Weapon7Test
                     "glowIcon",
                     GetMember(originalDescriptor, "glowIcon"));
 
-                SetMember(
-                    newDescriptor,
-                    "variationColor",
-                    GetMember(originalDescriptor, "variationColor"));
+                Type variantType = FindType("WeaponVariant");
+
+                if (variantType != null &&
+                    variantType.IsEnum)
+                {
+                    object goldVariant = Enum.Parse(
+                        variantType,
+                        "GoldVariant");
+
+                    if (!SetMember(
+                            newDescriptor,
+                            "variationColor",
+                            goldVariant))
+                    {
+                        log.Warn(
+                            "[Weapon7] Could not assign GoldVariant.");
+                    }
+                    else
+                    {
+                        log.Info(
+                            "[Weapon7] Descriptor variationColor = " +
+                            goldVariant);
+                    }
+                }
+                else
+                {
+                    log.Warn(
+                        "[Weapon7] WeaponVariant enum not found.");
+                }
             }
 
             if (!SetMember(
