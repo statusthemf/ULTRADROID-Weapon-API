@@ -1,3 +1,4 @@
+
 using System;
 using System.Reflection;
 using BepInEx;
@@ -207,7 +208,6 @@ namespace ULTRADROID.Weapon7Test
                     return false;
                 }
 
-                // Reuse our weapon if it already exists.
                 if (slot7 != null && testWeapon == null)
                 {
                     for (int i = 0;
@@ -226,7 +226,6 @@ namespace ULTRADROID.Weapon7Test
                     }
                 }
 
-                // Create slot 7 without modifying the original six.
                 if (slotCount < 7)
                 {
                     Type slotsType = slots.GetType();
@@ -260,7 +259,6 @@ namespace ULTRADROID.Weapon7Test
                 if (slot7 == null)
                     return false;
 
-                // Clone a weapon only when our clone does not exist.
                 if (testWeapon == null)
                 {
                     GameObject template =
@@ -280,7 +278,6 @@ namespace ULTRADROID.Weapon7Test
 
                     testWeapon.name = "ULTRADROID_TEST_WEAPON7";
 
-                    // NEW: dump every component on the cloned weapon.
                     Weapon7Helpers.LogWeaponComponents(testWeapon, Log);
 
                     testWeapon.SetActive(false);
@@ -289,8 +286,6 @@ namespace ULTRADROID.Weapon7Test
                         "[Weapon7] Cloned template: " + template.name);
                 }
 
-                // The cloned WeaponIcon initially points to the
-                // original weapon's descriptor. Give it a new one.
                 if (!descriptorConfigured)
                 {
                     descriptorConfigured =
@@ -618,7 +613,6 @@ namespace ULTRADROID.Weapon7Test
             if (descriptorType == null)
                 return null;
 
-            // Prefer the generic CreateInstance<T>() overload.
             foreach (MethodInfo method in typeof(ScriptableObject).GetMethods(
                          BindingFlags.Public |
                          BindingFlags.NonPublic |
@@ -645,8 +639,6 @@ namespace ULTRADROID.Weapon7Test
                 }
             }
 
-            // Fallback: CreateInstance(Type), including the IL2CPP
-            // System.Type wrapper expected by some interop versions.
             object il2CppType = null;
 
             try
@@ -1028,45 +1020,189 @@ namespace ULTRADROID.Weapon7Test
                 instance.GetType().FullName, name);
         }
 
-        // NEW: logs all components attached to Weapon 7, including
-        // components on inactive child objects.
+        // Diagnostic update: query actual known game component types
+        // instead of trusting generic Component wrapper GetType().
         internal static void LogWeaponComponents(
             GameObject weapon,
             ManualLogSourceProxy log)
         {
-            if (weapon == null)
+            if (weapon == null || log == null)
                 return;
 
-            try
+            log.Info(
+                "[Weapon7] COMPONENT DIAGNOSTICS: " + weapon.name);
+
+            string[] names =
             {
-                object components = Invoke(
-                    weapon,
-                    "GetComponentsInChildren",
-                    Il2CppType.From(typeof(Component)),
-                    true);
+                "Revolver",
+                "WeaponIcon",
+                "WeaponIdentifier",
+                "WeaponPos",
+                "WeaponCharges",
+                "GunSetter",
+                "GunControl"
+            };
 
-                int count = Count(components);
-
-                log.Info(
-                    "[Weapon7] COMPONENT DUMP: " + weapon.name +
-                    " (count=" + count + ")");
-
-                for (int i = 0; i < count; i++)
+            foreach (string name in names)
+            {
+                try
                 {
-                    object component = Item(components, i);
+                    Type componentType = FindType(name);
 
-                    if (component == null)
+                    if (componentType == null)
+                    {
+                        log.Info(
+                            "[Weapon7] Type not found: " + name);
                         continue;
+                    }
+
+                    object components = Invoke(
+                        weapon,
+                        "GetComponentsInChildren",
+                        Il2CppType.From(componentType),
+                        true);
+
+                    int count = Count(components);
 
                     log.Info(
-                        "[Weapon7] Component[" + i + "] = " +
-                        TypeName(component));
+                        "[Weapon7] " + name +
+                        " components found: " + count);
+
+                    for (int i = 0; i < count; i++)
+                    {
+                        object component = WrapInstance(
+                            componentType,
+                            Item(components, i));
+
+                        if (component == null)
+                            continue;
+
+                        log.Info(
+                            "[Weapon7] " + name +
+                            "[" + i + "] pointer=0x" +
+                            GetPointer(component).ToString("X"));
+
+                        if (name == "Revolver")
+                        {
+                            string[] members =
+                            {
+                                "inman",
+                                "wid",
+                                "gunVariation",
+                                "altVersion",
+                                "gunAud",
+                                "gunBarrel",
+                                "revolverBeam",
+                                "revolverBeamSuper",
+                                "chargeEffect",
+                                "coin",
+                                "gc",
+                                "wpos",
+                                "wc"
+                            };
+
+                            foreach (string member in members)
+                                LogMember(component, member, log);
+
+                            LogComponentMethods(
+                                componentType,
+                                new[]
+                                {
+                                    "Shoot",
+                                    "ThrowCoin",
+                                    "ReadyGun",
+                                    "Click",
+                                    "InstaClick",
+                                    "MaxCharge",
+                                    "OnEnable",
+                                    "OnDisable",
+                                    "Update"
+                                },
+                                log);
+                        }
+                    }
                 }
+                catch (Exception ex)
+                {
+                    log.Warn(
+                        "[Weapon7] Inspection failed for " +
+                        name + ": " + Unwrap(ex));
+                }
+            }
+        }
+
+        private static void LogMember(
+            object instance,
+            string memberName,
+            ManualLogSourceProxy log)
+        {
+            try
+            {
+                object value = GetMember(instance, memberName);
+
+                log.Info(
+                    "[Weapon7]   " + memberName + " = " +
+                    (value == null ? "null" : TypeName(value)));
             }
             catch (Exception ex)
             {
                 log.Warn(
-                    "[Weapon7] Component dump failed: " + Unwrap(ex));
+                    "[Weapon7]   Could not inspect " +
+                    memberName + ": " + Unwrap(ex));
+            }
+        }
+
+        private static void LogComponentMethods(
+            Type type,
+            string[] wantedNames,
+            ManualLogSourceProxy log)
+        {
+            if (type == null)
+                return;
+
+            for (Type current = type;
+                 current != null;
+                 current = current.BaseType)
+            {
+                foreach (MethodInfo method in current.GetMethods(
+                             BindingFlags.Instance |
+                             BindingFlags.Public |
+                             BindingFlags.NonPublic |
+                             BindingFlags.DeclaredOnly))
+                {
+                    bool wanted = false;
+
+                    foreach (string wantedName in wantedNames)
+                    {
+                        if (method.Name == wantedName)
+                        {
+                            wanted = true;
+                            break;
+                        }
+                    }
+
+                    if (!wanted)
+                        continue;
+
+                    ParameterInfo[] parameters =
+                        method.GetParameters();
+
+                    string signature = method.Name + "(";
+
+                    for (int i = 0; i < parameters.Length; i++)
+                    {
+                        if (i > 0)
+                            signature += ", ";
+
+                        signature += parameters[i].ParameterType.Name;
+                    }
+
+                    signature += ")";
+
+                    log.Info(
+                        "[Weapon7]   Revolver method: " +
+                        signature);
+                }
             }
         }
 
@@ -1227,9 +1363,29 @@ namespace ULTRADROID.Weapon7Test
 
         internal static string TypeName(object value)
         {
-            return value == null
-                ? "null"
-                : value.GetType().FullName;
+            if (value == null)
+                return "null";
+
+            Type managedType = value.GetType();
+            string fullName = managedType.FullName;
+
+            if (!string.IsNullOrEmpty(fullName) &&
+                fullName != "UnityEngine.Component" &&
+                fullName != "UnityEngine.Object")
+            {
+                return fullName;
+            }
+
+            Il2CppObjectBase native = value as Il2CppObjectBase;
+
+            if (native != null)
+            {
+                return managedType.FullName +
+                       " [IL2CPP pointer=0x" +
+                       native.Pointer.ToString("X") + "]";
+            }
+
+            return managedType.FullName ?? managedType.Name;
         }
 
         internal static Exception Unwrap(Exception ex)
