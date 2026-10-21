@@ -56,6 +56,7 @@ namespace ULTRADROID.Weapon7Test
         private int lastWaitingLogFrame = -120;
         private int equippedSeenFrame = -1;
         private int lastFireInputLogFrame = -1;
+        private int lastLiveStateLogFrame = -120;
 
         // Fire-input probe caching
         private object cachedPlayerInput;
@@ -150,7 +151,10 @@ namespace ULTRADROID.Weapon7Test
                 }
 
                 if (slotSetupComplete)
+                {
                     CheckEquippedWeaponDiagnostics();
+                    LogLiveWeaponState();
+                }
             }
             catch (Exception ex)
             {
@@ -173,6 +177,7 @@ namespace ULTRADROID.Weapon7Test
 
             equippedSeenFrame = -1;
             postEquipDiagnosticsLogged = false;
+            lastLiveStateLogFrame = -120;
 
             // Reset fire-input probe state
             lastFireInputLogFrame = -1;
@@ -777,6 +782,156 @@ namespace ULTRADROID.Weapon7Test
 
             Log.Info(
                 "[Weapon7] ===== END POST-EQUIP DIAGNOSTICS =====");
+        }
+
+        private void LogLiveWeaponState()
+        {
+            if (gunControl == null || testWeapon == null)
+                return;
+
+            if (Time.frameCount - lastLiveStateLogFrame < 30)
+                return;
+
+            object currentWeapon =
+                Weapon7Helpers.GetMember(gunControl, "currentWeapon");
+
+            IntPtr currentPointer =
+                Weapon7Helpers.GetPointer(currentWeapon);
+
+            IntPtr testPointer =
+                Weapon7Helpers.GetPointer(testWeapon);
+
+            if (testPointer == IntPtr.Zero ||
+                currentPointer != testPointer)
+                return;
+
+            lastLiveStateLogFrame = Time.frameCount;
+
+            try
+            {
+                Type revolverType =
+                    Weapon7Helpers.FindType("Revolver");
+
+                if (revolverType == null)
+                    return;
+
+                object components = Weapon7Helpers.Invoke(
+                    testWeapon,
+                    "GetComponentsInChildren",
+                    Il2CppType.From(revolverType),
+                    true);
+
+                if (Weapon7Helpers.Count(components) == 0)
+                    return;
+
+                object revolver =
+                    Weapon7Helpers.WrapForDiagnostics(
+                        revolverType,
+                        Weapon7Helpers.Item(components, 0));
+
+                if (revolver == null)
+                    return;
+
+                Log.Info(
+                    "[Weapon7] ===== LIVE FIRING STATE frame=" +
+                    Time.frameCount + " =====");
+
+                string[] fields =
+                {
+                    "enabled",
+                    "gunReady",
+                    "shootReady",
+                    "pierceReady",
+                    "chargingPierce",
+                    "shootCharge",
+                    "pierceCharge",
+                    "pierceShotCharge",
+                    "gunVariation",
+                    "altVersion"
+                };
+
+                foreach (string field in fields)
+                {
+                    object value =
+                        Weapon7Helpers.GetMember(revolver, field);
+
+                    Log.Info(
+                        "[Weapon7] LIVE " + field + "=" +
+                        (value == null ? "<null/unavailable>" : value));
+                }
+
+                object inman =
+                    Weapon7Helpers.GetMember(revolver, "inman");
+
+                object inputSource =
+                    Weapon7Helpers.GetMember(inman, "InputSource");
+
+                object fire1 =
+                    Weapon7Helpers.GetMember(inputSource, "Fire1");
+
+                object globalFire1 =
+                    Weapon7Helpers.GetMember(
+                        cachedPlayerInput, "Fire1");
+
+                Log.Info(
+                    "[Weapon7] LIVE inman=0x" +
+                    Weapon7Helpers.GetPointer(inman).ToString("X") +
+                    " InputSource=0x" +
+                    Weapon7Helpers.GetPointer(inputSource).ToString("X") +
+                    " Fire1=0x" +
+                    Weapon7Helpers.GetPointer(fire1).ToString("X"));
+
+                Log.Info(
+                    "[Weapon7] LIVE global Fire1=0x" +
+                    Weapon7Helpers.GetPointer(globalFire1).ToString("X"));
+
+                if (fire1 != null)
+                {
+                    object performed =
+                        Weapon7Helpers.GetMember(
+                            fire1, "WasPerformedThisFrame");
+
+                    object pressed =
+                        Weapon7Helpers.GetMember(fire1, "IsPressed");
+
+                    Log.Info(
+                        "[Weapon7] LIVE W7 Fire1 performed=" +
+                        (performed == null ? "unavailable" : performed) +
+                        " pressed=" +
+                        (pressed == null ? "unavailable" : pressed));
+                }
+
+                object wid =
+                    Weapon7Helpers.GetMember(revolver, "wid");
+
+                object gc =
+                    Weapon7Helpers.GetMember(revolver, "gc");
+
+                object wpos =
+                    Weapon7Helpers.GetMember(revolver, "wpos");
+
+                object wc =
+                    Weapon7Helpers.GetMember(revolver, "wc");
+
+                Log.Info(
+                    "[Weapon7] LIVE refs: wid=0x" +
+                    Weapon7Helpers.GetPointer(wid).ToString("X") +
+                    " gc=0x" +
+                    Weapon7Helpers.GetPointer(gc).ToString("X") +
+                    " wpos=0x" +
+                    Weapon7Helpers.GetPointer(wpos).ToString("X") +
+                    " wc=0x" +
+                    Weapon7Helpers.GetPointer(wc).ToString("X"));
+
+                Log.Info(
+                    "[Weapon7] ===== END LIVE FIRING STATE =====");
+            }
+            catch (Exception ex)
+            {
+                Log.Warn(
+                    "[Weapon7] Live firing-state diagnostic failed: " +
+                    Weapon7Helpers.Unwrap(ex));
+            }
         }
 
         private void SwitchToSlot7()
