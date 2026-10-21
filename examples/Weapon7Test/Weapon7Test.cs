@@ -710,6 +710,71 @@ namespace ULTRADROID.Weapon7Test
             }
         }
 
+        private void ApplyWeapon7GoldTint(GameObject weapon)
+        {
+            if (weapon == null)
+            {
+                Log.Warn("[W7 GOLD] Weapon is null.");
+                return;
+            }
+
+            object renderers = Weapon7Helpers.Invoke(
+                weapon,
+                "GetComponentsInChildren",
+                Il2CppType.From(typeof(Renderer)),
+                true);
+
+            Color gold = new Color(1.0f, 0.68f, 0.12f, 1.0f);
+            int changed = 0;
+
+            for (int i = 0; i < Weapon7Helpers.Count(renderers); i++)
+            {
+                Renderer renderer = Weapon7Helpers.WrapForDiagnostics(
+                    typeof(Renderer),
+                    Weapon7Helpers.Item(renderers, i)) as Renderer;
+
+                if (renderer == null)
+                    continue;
+
+                // renderer.materials provides renderer-specific material instances.
+                object materials = Weapon7Helpers.GetMember(
+                    renderer, "materials");
+
+                for (int j = 0; j < Weapon7Helpers.Count(materials); j++)
+                {
+                    Material material = Weapon7Helpers.WrapForDiagnostics(
+                        typeof(Material),
+                        Weapon7Helpers.Item(materials, j)) as Material;
+
+                    if (material == null)
+                        continue;
+
+                    bool hasColor = (bool)Weapon7Helpers.Invoke(
+                        material, "HasProperty", "_Color");
+
+                    Log.Info(
+                        "[W7 GOLD] Renderer=" + renderer.name +
+                        ", Material=" + material.name +
+                        ", Shader=" +
+                        (material.shader != null
+                            ? material.shader.name
+                            : "null") +
+                        ", Has _Color=" + hasColor);
+
+                    if (hasColor)
+                    {
+                        Weapon7Helpers.Invoke(
+                            material, "SetColor", "_Color", gold);
+                        changed++;
+                    }
+                }
+            }
+
+            Log.Info(
+                "[W7 GOLD] Applied gold tint to " +
+                changed + " material(s).");
+        }
+
         private void LogWeapon7Renderers(GameObject weapon)
         {
             if (weapon == null)
@@ -947,6 +1012,7 @@ namespace ULTRADROID.Weapon7Test
             Weapon7Helpers.LogRevolverRuntimeState(testWeapon, Log);
             LogWeapon7Renderers(testWeapon);
             LogWeapon7ColorGetterState(testWeapon);
+            ApplyWeapon7GoldTint(testWeapon);
 
             Log.Info(
                 "[Weapon7] ===== END POST-EQUIP DIAGNOSTICS =====");
