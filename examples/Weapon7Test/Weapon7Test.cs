@@ -785,6 +785,97 @@ namespace ULTRADROID.Weapon7Test
             }
         }
 
+        private void LogWeapon7ColorGetterState(GameObject weapon)
+        {
+            if (weapon == null)
+                return;
+
+            Type getterType = Weapon7Helpers.FindType("GunColorGetter");
+
+            if (getterType == null)
+            {
+                Log.Warn("[W7 COLOR STATE] GunColorGetter type not found.");
+                return;
+            }
+
+            try
+            {
+                object getters = Weapon7Helpers.Invoke(
+                    weapon,
+                    "GetComponentsInChildren",
+                    Il2CppType.From(getterType),
+                    true);
+
+                int count = Weapon7Helpers.Count(getters);
+
+                Log.Info("[W7 COLOR STATE] Getter count=" + count);
+
+                for (int i = 0; i < count; i++)
+                {
+                    object getter = Weapon7Helpers.WrapForDiagnostics(
+                        getterType,
+                        Weapon7Helpers.Item(getters, i));
+
+                    if (getter == null)
+                        continue;
+
+                    Log.Info("[W7 COLOR STATE] Getter[" + i + "]");
+
+                    string[] fields =
+                    {
+                        "weaponNumber",
+                        "altVersion",
+                        "hasCustomColors",
+                        "currentColors",
+                        "defaultMaterials",
+                        "coloredMaterials",
+                        "customColors"
+                    };
+
+                    foreach (string field in fields)
+                    {
+                        try
+                        {
+                            object value = Weapon7Helpers.GetMember(
+                                getter, field);
+
+                            Log.Info(
+                                "[W7 COLOR STATE] " + field + "=" +
+                                (value == null ? "null" : value.ToString()));
+
+                            if (field == "currentColors" && value != null)
+                            {
+                                foreach (string colorName in new[]
+                                         { "color1", "color2", "color3" })
+                                {
+                                    object color = Weapon7Helpers.GetMember(
+                                        value, colorName);
+
+                                    Log.Info(
+                                        "[W7 COLOR STATE] " + colorName + "=" +
+                                        (color == null
+                                            ? "null"
+                                            : color.ToString()));
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Warn(
+                                "[W7 COLOR STATE] Could not read " +
+                                field + ": " + Weapon7Helpers.Unwrap(ex));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(
+                    "[W7 COLOR STATE] Diagnostic failed: " +
+                    Weapon7Helpers.Unwrap(ex));
+            }
+        }
+
         private void CheckEquippedWeaponDiagnostics()
         {
             if (postEquipDiagnosticsLogged ||
@@ -855,6 +946,7 @@ namespace ULTRADROID.Weapon7Test
             Weapon7Helpers.LogWeaponComponents(testWeapon, Log);
             Weapon7Helpers.LogRevolverRuntimeState(testWeapon, Log);
             LogWeapon7Renderers(testWeapon);
+            LogWeapon7ColorGetterState(testWeapon);
 
             Log.Info(
                 "[Weapon7] ===== END POST-EQUIP DIAGNOSTICS =====");
