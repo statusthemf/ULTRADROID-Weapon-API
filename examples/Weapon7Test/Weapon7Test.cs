@@ -24,15 +24,9 @@ public override void Load()
 {
 Weapon7Runtime.Log = new ManualLogSourceProxy(Log);
 
-        try
-        {
-            AddComponent<Weapon7Runtime>();
-            Log.LogInfo("[Weapon7] Test plugin loaded.");
-        }
-        catch (Exception ex)
-        {
-            Log.LogError("[Weapon7] Startup failed: " + ex);
-        }
+        AddComponent<Weapon7Runtime>();
+
+        Log.LogInfo("[Weapon7] Test plugin loaded.");
     }
 }
 
@@ -40,25 +34,19 @@ internal sealed class ManualLogSourceProxy
 {
     private readonly ManualLogSource source;
 
-    internal ManualLogSourceProxy(ManualLogSource value)
+    internal ManualLogSourceProxy(ManualLogSource source)
     {
-        source = value;
+        this.source = source;
     }
 
-    internal void Info(string message)
-    {
+    internal void Info(string message) =>
         source.LogInfo(message);
-    }
 
-    internal void Warn(string message)
-    {
+    internal void Warn(string message) =>
         source.LogWarning(message);
-    }
 
-    internal void Error(string message)
-    {
+    internal void Error(string message) =>
         source.LogError(message);
-    }
 }
 
 public sealed class Weapon7Runtime : MonoBehaviour
@@ -78,10 +66,9 @@ public sealed class Weapon7Runtime : MonoBehaviour
     private bool methodDiagnosticsLogged;
     private bool slotSetupComplete;
     private bool refreshAttempted;
+    private bool wheelDiagnosticsLogged;
 
-    public Weapon7Runtime(IntPtr ptr) : base(ptr)
-    {
-    }
+    public Weapon7Runtime(IntPtr ptr) : base(ptr) { }
 
     public void Update()
     {
@@ -106,13 +93,20 @@ public sealed class Weapon7Runtime : MonoBehaviour
 
             if (found == null)
             {
-                if (Time.frameCount - lastWaitingLogFrame >= 600)
+                if (slotSetupComplete)
+                {
+                    Log.Warn(
+                        "[Weapon7] GunControl is no longer ready; " +
+                        "waiting for reinitialization.");
+
+                    ResetInstanceState();
+                }
+                else if (Time.frameCount - lastWaitingLogFrame >= 600)
                 {
                     lastWaitingLogFrame = Time.frameCount;
 
                     Log.Warn(
-                        "[Weapon7] Waiting for a GunControl instance " +
-                        "with six initialized weapon slots.");
+                        "[Weapon7] Waiting for initialized GunControl.");
                 }
 
                 return;
@@ -125,22 +119,22 @@ public sealed class Weapon7Runtime : MonoBehaviour
 
             if (pointer != lastGunPointer)
             {
+                ResetInstanceState();
+
                 lastGunPointer = pointer;
                 gunControl = found;
-                testWeapon = null;
-
-                slotSetupComplete = false;
-                refreshAttempted = false;
-                methodDiagnosticsLogged = false;
 
                 Log.Info(
-                    "[Weapon7] Found initialized GunControl: " +
-                    Weapon7Helpers.TypeName(found));
+                    "[Weapon7] Found initialized GunControl.");
             }
             else
             {
                 gunControl = found;
             }
+
+            // Don't repeatedly clone or log when setup is already complete.
+            if (slotSetupComplete)
+                return;
 
             EnsureSlot7();
         }
@@ -150,6 +144,18 @@ public sealed class Weapon7Runtime : MonoBehaviour
                 "[Weapon7] Runtime error: " +
                 Weapon7Helpers.Unwrap(ex));
         }
+    }
+
+    private void ResetInstanceState()
+    {
+        lastGunPointer = IntPtr.Zero;
+        gunControl = null;
+        testWeapon = null;
+
+        slotSetupComplete = false;
+        refreshAttempted = false;
+        methodDiagnosticsLogged = false;
+        wheelDiagnosticsLogged = false;
     }
 
     private void RegisterButton()
@@ -189,26 +195,18 @@ public sealed class Weapon7Runtime : MonoBehaviour
         try
         {
             object slots = Weapon7Helpers.GetMember(
-                gunControl,
-                "slots");
+                gunControl, "slots");
 
             if (slots == null)
             {
-                Log.Warn(
-                    "[Weapon7] GunControl.slots could not be read.");
+                Log.Warn("[Weapon7] GunControl.slots unavailable.");
                 return false;
             }
 
             int slotCount = Weapon7Helpers.Count(slots);
 
             if (slotCount < 6)
-            {
-                Log.Warn(
-                    "[Weapon7] Slots are not ready. Count = " +
-                    slotCount);
-
                 return false;
-            }
 
             object slot7 = slotCount >= 7
                 ? Weapon7Helpers.Item(slots, 6)
@@ -216,18 +214,15 @@ public sealed class Weapon7Runtime : MonoBehaviour
 
             if (slotCount >= 7 && slot7 == null)
             {
-                Log.Error(
-                    "[Weapon7] The seventh slot exists by count, " +
-                    "but its list could not be read.");
-
+                Log.Warn("[Weapon7] Slot 7 could not be read.");
                 return false;
             }
 
             if (slot7 != null && testWeapon == null)
             {
-                int existingCount = Weapon7Helpers.Count(slot7);
-
-                for (int i = 0; i < existingCount; i++)
+                for (int i = 0;
+                     i < Weapon7Helpers.Count(slot7);
+                     i++)
                 {
                     GameObject item =
                         Weapon7Helpers.Item(slot7, i) as GameObject;
@@ -248,53 +243,31 @@ public sealed class Weapon7Runtime : MonoBehaviour
                 if (!slotsType.IsGenericType)
                 {
                     Log.Error(
-                        "[Weapon7] Unexpected slots collection type: " +
-                        slotsType.FullName);
-
+                        "[Weapon7] Unexpected slots collection type.");
                     return false;
                 }
 
-                Type[] genericArguments =
-                    slotsType.GetGenericArguments();
+                Type[] args = slotsType.GetGenericArguments();
 
-                if (genericArguments.Length != 1)
-                {
-                    Log.Error(
-                        "[Weapon7] Could not determine the slot type.");
-
+                if (args.Length != 1)
                     return false;
-                }
 
-                Type innerListType = genericArguments[0];
-
-                object newSlot = Activator.CreateInstance(
-                    innerListType);
+                object newSlot = Activator.CreateInstance(args[0]);
 
                 if (newSlot == null)
-                {
-                    Log.Error(
-                        "[Weapon7] Could not create the seventh slot.");
-
                     return false;
-                }
 
                 Weapon7Helpers.Add(slots, newSlot);
                 slot7 = newSlot;
 
-                Log.Info(
-                    "[Weapon7] Added slot 7 to GunControl.slots.");
+                Log.Info("[Weapon7] Added slot 7.");
             }
 
             if (slot7 == null)
                 slot7 = Weapon7Helpers.Item(slots, 6);
 
             if (slot7 == null)
-            {
-                Log.Error(
-                    "[Weapon7] Could not retrieve slot 7.");
-
                 return false;
-            }
 
             if (testWeapon == null)
             {
@@ -303,48 +276,33 @@ public sealed class Weapon7Runtime : MonoBehaviour
 
                 if (template == null)
                 {
-                    Log.Warn(
-                        "[Weapon7] No existing weapon is available " +
-                        "to clone yet.");
-
+                    Log.Warn("[Weapon7] No weapon template found.");
                     return false;
                 }
 
                 testWeapon = UnityEngine.Object.Instantiate(
-                    template,
-                    template.transform.parent);
+                    template, template.transform.parent);
 
                 if (testWeapon == null)
-                {
-                    Log.Error(
-                        "[Weapon7] Weapon cloning failed.");
-
                     return false;
-                }
 
                 testWeapon.name = "ULTRADROID_TEST_WEAPON7";
                 testWeapon.SetActive(false);
 
                 Log.Info(
-                    "[Weapon7] Created temporary test weapon from: " +
+                    "[Weapon7] Cloned temporary template: " +
                     template.name);
             }
 
             if (!Weapon7Helpers.Contains(slot7, testWeapon))
-            {
                 Weapon7Helpers.Add(slot7, testWeapon);
-
-                Log.Info(
-                    "[Weapon7] Added temporary weapon to slot 7.");
-            }
 
             if (!methodDiagnosticsLogged)
             {
                 methodDiagnosticsLogged = true;
 
                 Weapon7Helpers.LogRelevantMethods(
-                    gunControl.GetType(),
-                    Log);
+                    gunControl.GetType(), Log);
             }
 
             if (!refreshAttempted)
@@ -354,30 +312,31 @@ public sealed class Weapon7Runtime : MonoBehaviour
                 try
                 {
                     Weapon7Helpers.Invoke(
-                        gunControl,
-                        "CalculateSlotCount");
+                        gunControl, "CalculateSlotCount");
 
                     Log.Info(
-                        "[Weapon7] CalculateSlotCount invoked after " +
-                        "slot 7 setup.");
+                        "[Weapon7] CalculateSlotCount invoked.");
                 }
                 catch (Exception ex)
                 {
                     Log.Warn(
-                        "[Weapon7] CalculateSlotCount invocation failed: " +
+                        "[Weapon7] CalculateSlotCount failed: " +
                         Weapon7Helpers.Unwrap(ex));
                 }
 
-                // NEW: inspect descriptors after the refresh attempt.
-                Weapon7Helpers.LogWeaponDescriptors(gunControl, Log);
+                Weapon7Helpers.LogWeaponDescriptors(
+                    gunControl, Log);
+
+                Weapon7Helpers.LogWheelSegments(Log);
+                wheelDiagnosticsLogged = true;
             }
 
             slotSetupComplete = true;
 
             Log.Info(
-                "[Weapon7] Slot setup complete. Outer slot count = " +
+                "[Weapon7] Setup complete: slots=" +
                 Weapon7Helpers.Count(slots) +
-                ", slot 7 weapon count = " +
+                ", slot7 weapons=" +
                 Weapon7Helpers.Count(slot7));
 
             return true;
@@ -403,32 +362,33 @@ public sealed class Weapon7Runtime : MonoBehaviour
 
             if (found == null)
             {
-                Log.Warn(
-                    "[Weapon7] Cannot switch: initialized GunControl " +
-                    "was not found.");
-
+                Log.Warn("[Weapon7] GunControl not ready.");
                 return;
             }
 
-            gunControl = found;
-            lastGunPointer = Weapon7Helpers.GetPointer(found);
+            IntPtr pointer = Weapon7Helpers.GetPointer(found);
 
-            if (!EnsureSlot7())
+            if (pointer != lastGunPointer)
             {
-                Log.Warn(
-                    "[Weapon7] Cannot switch: slot 7 is not ready.");
+                ResetInstanceState();
+                lastGunPointer = pointer;
+                gunControl = found;
+            }
+            else
+            {
+                gunControl = found;
+            }
 
+            if (!slotSetupComplete && !EnsureSlot7())
+            {
+                Log.Warn("[Weapon7] Slot 7 setup is incomplete.");
                 return;
             }
 
             Weapon7Helpers.Invoke(
-                gunControl,
-                "SwitchWeapon",
-                7,
-                false);
+                gunControl, "SwitchWeapon", 7, false);
 
-            Log.Info(
-                "[Weapon7] SwitchWeapon(7, false) was invoked.");
+            Log.Info("[Weapon7] SwitchWeapon(7, false) invoked.");
         }
         catch (Exception ex)
         {
@@ -446,10 +406,10 @@ internal static class Weapon7Helpers
         foreach (Assembly assembly in
                  AppDomain.CurrentDomain.GetAssemblies())
         {
-            Type type = assembly.GetType(name, false);
+            Type direct = assembly.GetType(name, false);
 
-            if (type != null)
-                return type;
+            if (direct != null)
+                return direct;
 
             try
             {
@@ -457,9 +417,7 @@ internal static class Weapon7Helpers
                 {
                     if (candidate != null &&
                         candidate.Name == name)
-                    {
                         return candidate;
-                    }
                 }
             }
             catch (ReflectionTypeLoadException ex)
@@ -471,9 +429,7 @@ internal static class Weapon7Helpers
                 {
                     if (candidate != null &&
                         candidate.Name == name)
-                    {
                         return candidate;
-                    }
                 }
             }
             catch
@@ -494,29 +450,16 @@ internal static class Weapon7Helpers
         object found = UnityEngine.Object.FindObjectsOfType(
             Il2CppType.From(type));
 
-        if (found == null)
-            return null;
-
-        int count = Count(found);
-
-        for (int i = 0; i < count; i++)
+        for (int i = 0; i < Count(found); i++)
         {
-            object raw = Item(found, i);
-
-            if (raw == null)
-                continue;
-
-            object candidate = WrapInstance(type, raw);
+            object candidate = WrapInstance(type, Item(found, i));
 
             if (candidate == null)
                 continue;
 
             object slots = GetMember(candidate, "slots");
 
-            if (slots == null)
-                continue;
-
-            if (Count(slots) >= 6)
+            if (slots != null && Count(slots) >= 6)
                 return candidate;
         }
 
@@ -525,6 +468,9 @@ internal static class Weapon7Helpers
 
     private static object WrapInstance(Type type, object raw)
     {
+        if (raw == null)
+            return null;
+
         if (type.IsInstanceOfType(raw))
             return raw;
 
@@ -533,7 +479,7 @@ internal static class Weapon7Helpers
         if (native == null || native.Pointer == IntPtr.Zero)
             return null;
 
-        ConstructorInfo constructor = type.GetConstructor(
+        ConstructorInfo ctor = type.GetConstructor(
             BindingFlags.Instance |
             BindingFlags.Public |
             BindingFlags.NonPublic,
@@ -541,25 +487,18 @@ internal static class Weapon7Helpers
             new[] { typeof(IntPtr) },
             null);
 
-        if (constructor == null)
-            return null;
-
-        return constructor.Invoke(
-            new object[] { native.Pointer });
+        return ctor == null
+            ? null
+            : ctor.Invoke(new object[] { native.Pointer });
     }
 
     internal static IntPtr GetPointer(object value)
     {
         Il2CppObjectBase native = value as Il2CppObjectBase;
-
-        return native == null
-            ? IntPtr.Zero
-            : native.Pointer;
+        return native == null ? IntPtr.Zero : native.Pointer;
     }
 
-    internal static object GetMember(
-        object instance,
-        string name)
+    internal static object GetMember(object instance, string name)
     {
         if (instance == null)
             return null;
@@ -606,42 +545,29 @@ internal static class Weapon7Helpers
         if (collection is Array array)
             return array.Length;
 
-        object value = GetMember(collection, "Count");
+        object count = GetMember(collection, "Count");
 
-        if (value == null)
-            return 0;
-
-        return Convert.ToInt32(value);
+        return count == null ? 0 : Convert.ToInt32(count);
     }
 
-    internal static object Item(
-        object collection,
-        int index)
+    internal static object Item(object collection, int index)
     {
         if (collection == null || index < 0)
             return null;
 
         if (collection is Array array)
-        {
-            return index < array.Length
-                ? array.GetValue(index)
-                : null;
-        }
+            return index < array.Length ? array.GetValue(index) : null;
 
         try
         {
-            PropertyInfo property = collection.GetType().GetProperty(
+            PropertyInfo item = collection.GetType().GetProperty(
                 "Item",
                 BindingFlags.Instance |
                 BindingFlags.Public |
                 BindingFlags.NonPublic);
 
-            if (property != null)
-            {
-                return property.GetValue(
-                    collection,
-                    new object[] { index });
-            }
+            if (item != null)
+                return item.GetValue(collection, new object[] { index });
         }
         catch
         {
@@ -657,15 +583,10 @@ internal static class Weapon7Helpers
                 if (method.Name != "get_Item")
                     continue;
 
-                ParameterInfo[] parameters = method.GetParameters();
+                ParameterInfo[] p = method.GetParameters();
 
-                if (parameters.Length == 1 &&
-                    parameters[0].ParameterType == typeof(int))
-                {
-                    return method.Invoke(
-                        collection,
-                        new object[] { index });
-                }
+                if (p.Length == 1 && p[0].ParameterType == typeof(int))
+                    return method.Invoke(collection, new object[] { index });
             }
         }
         catch
@@ -675,9 +596,7 @@ internal static class Weapon7Helpers
         return null;
     }
 
-    internal static void Add(
-        object collection,
-        object value)
+    internal static void Add(object collection, object value)
     {
         if (collection == null)
             throw new ArgumentNullException(nameof(collection));
@@ -690,43 +609,31 @@ internal static class Weapon7Helpers
             if (method.Name != "Add")
                 continue;
 
-            ParameterInfo[] parameters = method.GetParameters();
+            ParameterInfo[] p = method.GetParameters();
 
-            if (parameters.Length != 1)
+            if (p.Length != 1)
                 continue;
-
-            Type expected = parameters[0].ParameterType;
 
             if (value != null &&
-                !expected.IsInstanceOfType(value) &&
-                expected != value.GetType())
-            {
+                !p[0].ParameterType.IsInstanceOfType(value) &&
+                p[0].ParameterType != value.GetType())
                 continue;
-            }
 
             method.Invoke(collection, new[] { value });
             return;
         }
 
         throw new MissingMethodException(
-            collection.GetType().FullName,
-            "Add");
+            collection.GetType().FullName, "Add");
     }
 
     internal static bool Contains(
-        object collection,
-        GameObject target)
+        object collection, GameObject target)
     {
-        if (collection == null || target == null)
-            return false;
-
-        int count = Count(collection);
-
-        for (int i = 0; i < count; i++)
+        for (int i = 0; i < Count(collection); i++)
         {
-            GameObject item = Item(collection, i) as GameObject;
-
-            if (item == target)
+            if (Item(collection, i) is GameObject item &&
+                item == target)
                 return true;
         }
 
@@ -741,20 +648,13 @@ internal static class Weapon7Helpers
         {
             object slot = Item(slots, i);
 
-            if (slot == null)
-                continue;
-
-            int count = Count(slot);
-
-            for (int j = 0; j < count; j++)
+            for (int j = 0; j < Count(slot); j++)
             {
                 GameObject weapon = Item(slot, j) as GameObject;
 
                 if (weapon != null &&
                     weapon.name != "ULTRADROID_TEST_WEAPON7")
-                {
                     return weapon;
-                }
             }
         }
 
@@ -762,9 +662,7 @@ internal static class Weapon7Helpers
     }
 
     internal static object Invoke(
-        object instance,
-        string name,
-        params object[] arguments)
+        object instance, string name, params object[] arguments)
     {
         if (instance == null)
             throw new ArgumentNullException(nameof(instance));
@@ -782,101 +680,108 @@ internal static class Weapon7Helpers
                 if (method.Name != name)
                     continue;
 
-                ParameterInfo[] parameters = method.GetParameters();
+                ParameterInfo[] p = method.GetParameters();
 
-                if (parameters.Length != arguments.Length)
+                if (p.Length != arguments.Length)
                     continue;
 
-                bool matches = true;
+                bool match = true;
 
-                for (int i = 0; i < parameters.Length; i++)
+                for (int i = 0; i < p.Length; i++)
                 {
                     if (arguments[i] == null)
                     {
-                        if (parameters[i].ParameterType.IsValueType &&
+                        if (p[i].ParameterType.IsValueType &&
                             Nullable.GetUnderlyingType(
-                                parameters[i].ParameterType) == null)
-                        {
-                            matches = false;
-                            break;
-                        }
+                                p[i].ParameterType) == null)
+                            match = false;
 
                         continue;
                     }
 
-                    Type expected = parameters[i].ParameterType;
-                    Type actual = arguments[i].GetType();
-
-                    if (!expected.IsAssignableFrom(actual) &&
-                        expected != actual)
+                    if (!p[i].ParameterType.IsAssignableFrom(
+                            arguments[i].GetType()) &&
+                        p[i].ParameterType != arguments[i].GetType())
                     {
-                        matches = false;
+                        match = false;
                         break;
                     }
                 }
 
-                if (matches)
+                if (match)
                     return method.Invoke(instance, arguments);
             }
         }
 
         throw new MissingMethodException(
-            instance.GetType().FullName,
-            name);
+            instance.GetType().FullName, name);
     }
 
-    // NEW: read currentWeaponIcons and their descriptors.
     internal static void LogWeaponDescriptors(
-        object gunControl,
-        ManualLogSourceProxy log)
+        object gunControl, ManualLogSourceProxy log)
     {
-        object icons = GetMember(
-            gunControl,
-            "currentWeaponIcons");
-
-        int count = Count(icons);
+        object icons = GetMember(gunControl, "currentWeaponIcons");
 
         log.Info(
-            "[Weapon7] currentWeaponIcons count = " + count);
+            "[Weapon7] currentWeaponIcons count = " + Count(icons));
 
-        if (icons == null)
+        for (int i = 0; i < Count(icons); i++)
         {
-            log.Warn(
-                "[Weapon7] currentWeaponIcons is null or unreadable.");
+            object icon = Item(icons, i);
+            object descriptor = GetMember(icon, "weaponDescriptor");
+            object name = GetMember(descriptor, "weaponName");
+
+            log.Info(
+                "[Weapon7] Icon[" + i + "] descriptor=" +
+                TypeName(descriptor) +
+                " name=" + (name ?? "null"));
+        }
+    }
+
+    internal static void LogWheelSegments(ManualLogSourceProxy log)
+    {
+        Type type = FindType("WeaponWheel");
+
+        if (type == null)
+        {
+            log.Warn("[Weapon7] WeaponWheel type not found.");
             return;
         }
 
-        for (int i = 0; i < count; i++)
+        object found = UnityEngine.Object.FindObjectsOfType(
+            Il2CppType.From(type));
+
+        int wheels = Count(found);
+
+        log.Info("[Weapon7] WeaponWheel instances = " + wheels);
+
+        for (int w = 0; w < wheels; w++)
         {
-            object icon = Item(icons, i);
-
-            if (icon == null)
-            {
-                log.Info(
-                    "[Weapon7] Icon[" + i + "] = null");
-                continue;
-            }
-
-            object descriptor = GetMember(
-                icon,
-                "weaponDescriptor");
-
-            object weaponName = GetMember(
-                descriptor,
-                "weaponName");
+            object wheel = WrapInstance(type, Item(found, w));
+            object segments = GetMember(wheel, "segments");
 
             log.Info(
-                "[Weapon7] Icon[" + i + "] type=" +
-                TypeName(icon) +
-                ", descriptor=" + TypeName(descriptor) +
-                ", weaponName=" +
-                (weaponName == null ? "null" : weaponName.ToString()));
+                "[Weapon7] Wheel[" + w + "] segments = " +
+                Count(segments));
+
+            for (int i = 0; i < Count(segments); i++)
+            {
+                object segment = Item(segments, i);
+                object descriptor = GetMember(segment, "descriptor");
+                object name = GetMember(descriptor, "weaponName");
+                object slot = GetMember(segment, "slotIndex");
+
+                log.Info(
+                    "[Weapon7] Segment[" + i + "] slot=" +
+                    (slot ?? "null") +
+                    " descriptor=" + TypeName(descriptor) +
+                    " name=" + (name ?? "null"));
+            }
         }
     }
 
     internal static void LogRelevantMethods(
-        Type type,
-        ManualLogSourceProxy log)
+        Type type, ManualLogSourceProxy log)
     {
         log.Info("[Weapon7] Inspecting relevant GunControl methods:");
 
@@ -892,52 +797,39 @@ internal static class Weapon7Helpers
             {
                 string name = method.Name;
 
-                if (name.IndexOf(
-                        "weapon",
+                if (name.IndexOf("weapon",
                         StringComparison.OrdinalIgnoreCase) < 0 &&
-                    name.IndexOf(
-                        "slot",
+                    name.IndexOf("slot",
                         StringComparison.OrdinalIgnoreCase) < 0 &&
-                    name.IndexOf(
-                        "switch",
+                    name.IndexOf("switch",
                         StringComparison.OrdinalIgnoreCase) < 0)
-                {
                     continue;
-                }
 
-                ParameterInfo[] parameters = method.GetParameters();
-
+                ParameterInfo[] p = method.GetParameters();
                 string signature = name + "(";
 
-                for (int i = 0; i < parameters.Length; i++)
+                for (int i = 0; i < p.Length; i++)
                 {
                     if (i > 0)
                         signature += ", ";
 
-                    signature += parameters[i].ParameterType.Name;
+                    signature += p[i].ParameterType.Name;
                 }
 
-                signature += ")";
-
-                log.Info("[Weapon7] GunControl method: " + signature);
+                log.Info("[Weapon7] GunControl method: " +
+                         signature + ")");
             }
         }
     }
 
-    internal static string TypeName(object value)
-    {
-        return value == null
-            ? "null"
-            : value.GetType().FullName;
-    }
+    internal static string TypeName(object value) =>
+        value == null ? "null" : value.GetType().FullName;
 
     internal static Exception Unwrap(Exception ex)
     {
         while (ex is TargetInvocationException &&
                ex.InnerException != null)
-        {
             ex = ex.InnerException;
-        }
 
         return ex;
     }
