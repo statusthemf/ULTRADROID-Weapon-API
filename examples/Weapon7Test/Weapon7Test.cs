@@ -279,13 +279,16 @@ namespace ULTRADROID.Weapon7Test
                         return false;
 
                     testWeapon.name = "ULTRADROID_TEST_WEAPON7";
+
+                    // NEW: dump every component on the cloned weapon.
+                    Weapon7Helpers.LogWeaponComponents(testWeapon, Log);
+
                     testWeapon.SetActive(false);
 
                     Log.Info(
                         "[Weapon7] Cloned template: " + template.name);
                 }
 
-                // IMPORTANT:
                 // The cloned WeaponIcon initially points to the
                 // original weapon's descriptor. Give it a new one.
                 if (!descriptorConfigured)
@@ -610,8 +613,6 @@ namespace ULTRADROID.Weapon7Test
             return false;
         }
 
-        // Creates a real WeaponDescriptor through the game's
-        // ScriptableObject API, without a compile-time game reference.
         private static object CreateDescriptor(Type descriptorType)
         {
             if (descriptorType == null)
@@ -696,8 +697,6 @@ namespace ULTRADROID.Weapon7Test
             return null;
         }
 
-        // Give Weapon 7 its own descriptor while copying the original
-        // icon and variation settings so the wheel icon stays usable.
         internal static bool AssignUniqueDescriptor(
             GameObject weapon,
             string uniqueName,
@@ -744,7 +743,6 @@ namespace ULTRADROID.Weapon7Test
                 return false;
             }
 
-            // Find the original descriptor on the cloned icon.
             object firstIcon = WrapInstance(
                 iconType, Item(components, 0));
 
@@ -757,7 +755,6 @@ namespace ULTRADROID.Weapon7Test
             object originalName = GetMember(
                 originalDescriptor, "weaponName");
 
-            // Avoid creating a new descriptor every time setup retries.
             if (originalName != null &&
                 string.Equals(
                     originalName.ToString(),
@@ -780,7 +777,6 @@ namespace ULTRADROID.Weapon7Test
                 return false;
             }
 
-            // Preserve the template's visual settings.
             if (originalDescriptor != null)
             {
                 SetMember(
@@ -808,7 +804,6 @@ namespace ULTRADROID.Weapon7Test
                 return false;
             }
 
-            // Assign the new descriptor to every WeaponIcon on the clone.
             int assigned = 0;
 
             for (int i = 0; i < Count(components); i++)
@@ -1031,6 +1026,48 @@ namespace ULTRADROID.Weapon7Test
 
             throw new MissingMethodException(
                 instance.GetType().FullName, name);
+        }
+
+        // NEW: logs all components attached to Weapon 7, including
+        // components on inactive child objects.
+        internal static void LogWeaponComponents(
+            GameObject weapon,
+            ManualLogSourceProxy log)
+        {
+            if (weapon == null)
+                return;
+
+            try
+            {
+                object components = Invoke(
+                    weapon,
+                    "GetComponentsInChildren",
+                    Il2CppType.From(typeof(Component)),
+                    true);
+
+                int count = Count(components);
+
+                log.Info(
+                    "[Weapon7] COMPONENT DUMP: " + weapon.name +
+                    " (count=" + count + ")");
+
+                for (int i = 0; i < count; i++)
+                {
+                    object component = Item(components, i);
+
+                    if (component == null)
+                        continue;
+
+                    log.Info(
+                        "[Weapon7] Component[" + i + "] = " +
+                        TypeName(component));
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Warn(
+                    "[Weapon7] Component dump failed: " + Unwrap(ex));
+            }
         }
 
         internal static void LogWeaponDescriptors(
