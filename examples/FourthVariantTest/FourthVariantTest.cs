@@ -194,7 +194,29 @@ namespace ULTRADROID.FourthVariantTest
                     hasPierce = true;
 
                     if (pierceTemplate == null)
-                        pierceTemplate = item;
+                    {
+                        GameObject template =
+                            UnityEngine.Object.Instantiate(item);
+
+                        if (template != null)
+                        {
+                            template.name = "ULTRADROID_PIERCE_TEMPLATE";
+                            template.transform.SetParent(null);
+                            template.SetActive(false);
+
+                            UnityEngine.Object.DontDestroyOnLoad(template);
+
+                            pierceTemplate = template;
+
+                            Log.LogInfo(
+                                "[FourthVariant] Created persistent Pierce template.");
+                        }
+                        else
+                        {
+                            Log.LogWarning(
+                                "[FourthVariant] Failed to create Pierce template.");
+                        }
+                    }
                 }
 
                 if (itemName.IndexOf(
@@ -264,8 +286,8 @@ namespace ULTRADROID.FourthVariantTest
             // recreate Gold from the previously cached Pierce template.
             if (pierceTemplate == null)
             {
-                Log.LogInfo(
-                    "[FourthVariant] Waiting for a valid Pierce template. Count=" + count);
+                Log.LogWarning(
+                    "[FourthVariant] Pierce template is unavailable. Count=" + count);
 
                 return false;
             }
@@ -280,9 +302,8 @@ namespace ULTRADROID.FourthVariantTest
             // The game may have destroyed the previous object during a rebuild.
             // Recreate it from the Pierce variant, even when Marksman is disabled
             // and only two vanilla entries remain.
-            GameObject newGold = UnityEngine.Object.Instantiate(
-                pierceTemplate,
-                pierceTemplate.transform.parent);
+            GameObject newGold =
+                UnityEngine.Object.Instantiate(pierceTemplate);
 
             if (newGold == null)
             {
