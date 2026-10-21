@@ -1,4 +1,4 @@
-name: Build ULTRADROID Weapon 7 Test
+name: Build ULTRADROID Weapon API Tests
 
 on:
   push:
@@ -26,12 +26,14 @@ jobs:
           set -eu
 
           files=(
+            "lib/ULTRADROID.API.dll"
             "lib/BepInEx.Core.dll"
             "lib/BepInEx.Unity.IL2CPP.dll"
             "lib/Il2CppInterop.Runtime.dll"
             "lib/Il2Cppmscorlib.dll"
             "lib/Assembly-CSharp.dll"
             "lib/UnityEngine.CoreModule.dll"
+            "lib/Unity.TextMeshPro.dll"
           )
 
           for file in "${files[@]}"; do
@@ -45,9 +47,19 @@ jobs:
       - name: Build Weapon7Test
         run: dotnet build examples/Weapon7Test/Weapon7Test.csproj --configuration Release
 
-      - name: Upload test mod
+      - name: Build FourthVariantTest
+        run: dotnet build examples/FourthVariantTest/FourthVariantTest.csproj --configuration Release
+
+      - name: Upload Weapon7Test
         uses: actions/upload-artifact@v4
         with:
           name: ULTRADROID-Weapon7Test
           path: examples/Weapon7Test/bin/Release/**/*.dll
+          if-no-files-found: error
+
+      - name: Upload FourthVariantTest
+        uses: actions/upload-artifact@v4
+        with:
+          name: ULTRADROID-FourthVariantTest
+          path: examples/FourthVariantTest/bin/Release/**/*.dll
           if-no-files-found: error
