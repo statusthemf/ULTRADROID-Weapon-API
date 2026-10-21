@@ -35,6 +35,7 @@ namespace ULTRADROID.FourthVariantTest
         private object gunControl;
         private GameObject goldRevolver;
         private IntPtr lastGunPointer = IntPtr.Zero;
+        private string lastRevolverListState = null;
 
         private int lastCheckFrame = -120;
         private bool buttonRegistered;
@@ -86,6 +87,7 @@ namespace ULTRADROID.FourthVariantTest
                     lastGunPointer = pointer;
                     gunControl = found;
                     goldRevolver = null;
+                    lastRevolverListState = null;
                     setupComplete = false;
 
                     Log.LogInfo(
@@ -158,6 +160,26 @@ namespace ULTRADROID.FourthVariantTest
 
             int count = Helpers.Count(revolverSlot);
             bool goldFoundInList = false;
+
+            string listState = "Count=" + count;
+
+            for (int i = 0; i < count; i++)
+            {
+                GameObject item =
+                    Helpers.Item(revolverSlot, i) as GameObject;
+
+                listState += " | Revolver[" + i + "]=" +
+                    (item != null ? item.name : "<null>");
+            }
+
+            if (listState != lastRevolverListState)
+            {
+                lastRevolverListState = listState;
+
+                Log.LogInfo(
+                    "[FourthVariant] Revolver list changed: " +
+                    listState);
+            }
 
             for (int i = 0; i < count; i++)
             {
