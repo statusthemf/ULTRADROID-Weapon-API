@@ -151,7 +151,6 @@ namespace ULTRADROID.FourthVariantTest
                 return false;
             }
 
-            // Confirmed by the reverse-engineering investigation:
             // slots[0] is the Revolver family.
             object revolverSlot = Helpers.Item(slots, 0);
 
@@ -160,16 +159,56 @@ namespace ULTRADROID.FourthVariantTest
 
             int count = Helpers.Count(revolverSlot);
             bool goldFoundInList = false;
+            bool hasPierce = false;
+            bool hasRicochet = false;
+            bool hasTwirl = false;
+
+            GameObject pierceTemplate = null;
 
             string listState = "Count=" + count;
 
+            // Inspect the current list and identify its vanilla variants.
             for (int i = 0; i < count; i++)
             {
                 GameObject item =
                     Helpers.Item(revolverSlot, i) as GameObject;
 
-                listState += " | Revolver[" + i + "]=" +
-                    (item != null ? item.name : "<null>");
+                string itemName = item != null
+                    ? item.name
+                    : "<null>";
+
+                listState += " | Revolver[" + i + "]=" + itemName;
+
+                if (item == null)
+                    continue;
+
+                if (item.name == "ULTRADROID_FOURTH_GOLD_REVOLVER")
+                {
+                    goldRevolver = item;
+                    goldFoundInList = true;
+                    continue;
+                }
+
+                if (itemName.IndexOf(
+                        "Pierce", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    hasPierce = true;
+
+                    if (pierceTemplate == null)
+                        pierceTemplate = item;
+                }
+
+                if (itemName.IndexOf(
+                        "Ricochet", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    hasRicochet = true;
+                }
+
+                if (itemName.IndexOf(
+                        "Twirl", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    hasTwirl = true;
+                }
             }
 
             if (listState != lastRevolverListState)
@@ -181,111 +220,112 @@ namespace ULTRADROID.FourthVariantTest
                     listState);
             }
 
-            for (int i = 0; i < count; i++)
-            {
-                GameObject item =
-                    Helpers.Item(revolverSlot, i) as GameObject;
-
-                if (item == null)
-                    continue;
-
-                if (item.name == "ULTRADROID_FOURTH_GOLD_REVOLVER")
-                {
-                    goldRevolver = item;
-                    goldFoundInList = true;
-                }
-            }
-
-            // Log only when the list needs attention.
+            // Already registered: nothing to repair.
             if (goldFoundInList)
-            {
                 return true;
+
+            // Only restore Gold when the list contains a recognized,
+            // complete vanilla set for the current Marksman configuration.
+            // Marksman disabled: Pierce + Twirl.
+            // Marksman enabled: Pierce + Ricochet + Twirl.
+            bool validTwoVariantList =
+                count == 2 &&
+                hasPierce &&
+                hasTwirl &&
+                !hasRicochet;
+
+            bool validThreeVariantList =
+                count == 3 &&
+                hasPierce &&
+                hasRicochet &&
+                hasTwirl;
+
+            if (!validTwoVariantList && !validThreeVariantList)
+            {
+                Log.LogInfo(
+                    "[FourthVariant] Waiting for a recognized vanilla " +
+                    "Revolver list before restoring Gold. Count=" + count);
+
+                return false;
             }
 
-            // The game may have removed our object from the list without
-            // destroying it. If so, restore that same object instead of
-            // creating a duplicate.
+            if (pierceTemplate == null)
+            {
+                Log.LogWarning(
+                    "[FourthVariant] Cannot find a Pierce template.");
+                return false;
+            }
+
+            // If our previous Gold object still exists, reuse it.
+            // Never append it twice.
             if (goldRevolver != null)
             {
                 if (Helpers.Add(revolverSlot, goldRevolver))
                 {
-                    Log.LogWarning(
-                        "[FourthVariant] Gold Revolver was missing from the " +
-                        "Revolver list. Restored existing object. New count=" +
-                        Helpers.Count(revolverSlot));
+                    lastRevolverListState = null;
+
+                    Log.LogInfo(
+                        "[FourthVariant] Restored existing Gold Revolver. " +
+                        "New count=" + Helpers.Count(revolverSlot));
 
                     return true;
                 }
 
                 Log.LogWarning(
-                    "[FourthVariant] Could not restore existing Gold Revolver.");
+                    "[FourthVariant] Existing Gold object could not be restored. " +
+                    "Will try creating a replacement.");
+
+                goldRevolver = null;
             }
 
-            // No reusable Gold object is available. Only create a new clone
-            // when the list is exactly the original three vanilla variants.
-            count = Helpers.Count(revolverSlot);
+            // The game may have destroyed the previous object during a rebuild.
+            // Recreate it from the Pierce variant, even when Marksman is disabled
+            // and only two vanilla entries remain.
+            GameObject newGold = UnityEngine.Object.Instantiate(
+                pierceTemplate,
+                pierceTemplate.transform.parent);
 
-            Log.LogInfo(
-                "[FourthVariant] Revolver slot contains " +
-                count + " entries.");
-
-            if (count != 3)
-            {
-                Log.LogWarning(
-                    "[FourthVariant] Gold object is missing and the Revolver " +
-                    "list has " + count +
-                    " entries. Refusing to create a potentially duplicate clone.");
-
-                return false;
-            }
-
-            GameObject template =
-                Helpers.Item(revolverSlot, 0) as GameObject;
-
-            if (template == null)
+            if (newGold == null)
             {
                 Log.LogError(
-                    "[FourthVariant] Could not read Revolver template.");
+                    "[FourthVariant] Failed to clone Pierce template.");
                 return false;
             }
 
-            goldRevolver = UnityEngine.Object.Instantiate(
-                template, template.transform.parent);
-
-            if (goldRevolver == null)
-                return false;
-
-            goldRevolver.name = "ULTRADROID_FOURTH_GOLD_REVOLVER";
-            goldRevolver.SetActive(false);
+            newGold.name = "ULTRADROID_FOURTH_GOLD_REVOLVER";
+            newGold.SetActive(false);
 
             if (!Helpers.AssignGoldDescriptor(
-                    goldRevolver,
+                    newGold,
                     "ULTRADROID Gold Revolver IV"))
             {
-                UnityEngine.Object.Destroy(goldRevolver);
-                goldRevolver = null;
+                UnityEngine.Object.Destroy(newGold);
 
                 Log.LogError(
-                    "[FourthVariant] Descriptor setup failed.");
+                    "[FourthVariant] Gold descriptor setup failed.");
+
                 return false;
             }
 
-            if (!Helpers.Add(revolverSlot, goldRevolver))
+            if (!Helpers.Add(revolverSlot, newGold))
             {
-                UnityEngine.Object.Destroy(goldRevolver);
-                goldRevolver = null;
+                UnityEngine.Object.Destroy(newGold);
 
                 Log.LogError(
-                    "[FourthVariant] Could not append fourth variant.");
+                    "[FourthVariant] Could not append Gold Revolver.");
+
                 return false;
             }
+
+            goldRevolver = newGold;
+            lastRevolverListState = null;
 
             Log.LogInfo(
-                "[FourthVariant] Gold Revolver appended to slots[0].");
-
-            Log.LogWarning(
-                "[FourthVariant] Gold descriptor and list entry are set. " +
-                "Gold firing behavior still needs runtime verification.");
+                "[FourthVariant] Gold Revolver registered successfully. " +
+                "Vanilla count=" +
+                (validTwoVariantList ? "2 (Marksman disabled)" :
+                                       "3 (Marksman enabled)") +
+                " | Total count=" + Helpers.Count(revolverSlot));
 
             return true;
         }
