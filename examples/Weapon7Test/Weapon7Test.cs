@@ -727,6 +727,14 @@ namespace ULTRADROID.Weapon7Test
             Color gold = new Color(1.0f, 0.68f, 0.12f, 1.0f);
             int changed = 0;
 
+            Type getterType = Weapon7Helpers.FindType("GunColorGetter");
+
+            if (getterType == null)
+            {
+                Log.Warn("[W7 GOLD] GunColorGetter type not found.");
+                return;
+            }
+
             for (int i = 0; i < Weapon7Helpers.Count(renderers); i++)
             {
                 Renderer renderer = Weapon7Helpers.WrapForDiagnostics(
@@ -736,9 +744,25 @@ namespace ULTRADROID.Weapon7Test
                 if (renderer == null)
                     continue;
 
+                object getter = Weapon7Helpers.Invoke(
+                    renderer,
+                    "GetComponent",
+                    Il2CppType.From(getterType));
+
+                if (getter == null)
+                    continue;
+
                 // renderer.materials provides renderer-specific material instances.
                 object materials = Weapon7Helpers.GetMember(
                     renderer, "materials");
+
+                if (materials == null)
+                {
+                    Log.Warn(
+                        "[W7 GOLD] Could not retrieve materials for renderer " +
+                        renderer.name);
+                    continue;
+                }
 
                 for (int j = 0; j < Weapon7Helpers.Count(materials); j++)
                 {
