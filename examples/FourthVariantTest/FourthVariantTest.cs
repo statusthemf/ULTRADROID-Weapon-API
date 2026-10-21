@@ -34,6 +34,7 @@ namespace ULTRADROID.FourthVariantTest
 
         private object gunControl;
         private GameObject goldRevolver;
+        private GameObject pierceTemplate;
         private IntPtr lastGunPointer = IntPtr.Zero;
         private string lastRevolverListState = null;
 
@@ -163,8 +164,6 @@ namespace ULTRADROID.FourthVariantTest
             bool hasRicochet = false;
             bool hasTwirl = false;
 
-            GameObject pierceTemplate = null;
-
             string listState = "Count=" + count;
 
             // Inspect the current list and identify its vanilla variants.
@@ -261,20 +260,21 @@ namespace ULTRADROID.FourthVariantTest
                 hasRicochet &&
                 hasTwirl;
 
-            if (!validTwoVariantList && !validThreeVariantList)
+            // If the game is rebuilding the vanilla list, we can still
+            // recreate Gold from the previously cached Pierce template.
+            if (pierceTemplate == null)
             {
                 Log.LogInfo(
-                    "[FourthVariant] Waiting for a recognized vanilla " +
-                    "Revolver list before restoring Gold. Count=" + count);
+                    "[FourthVariant] Waiting for a valid Pierce template. Count=" + count);
 
                 return false;
             }
 
-            if (pierceTemplate == null)
+            if (!validTwoVariantList && !validThreeVariantList)
             {
-                Log.LogWarning(
-                    "[FourthVariant] Cannot find a Pierce template.");
-                return false;
+                Log.LogInfo(
+                    "[FourthVariant] Vanilla list is incomplete (Count=" + count +
+                    "). Attempting recovery using the cached Pierce template.");
             }
 
             // The game may have destroyed the previous object during a rebuild.
