@@ -96,8 +96,9 @@ namespace ULTRADROID.FourthVariantTest
                     gunControl = found;
                 }
 
-                if (!setupComplete)
-                    setupComplete = EnsureFourthVariant();
+                // The game may rebuild weapon lists after shop changes.
+                // Check and repair the fourth variant on every scheduled check.
+                setupComplete = EnsureFourthVariant();
             }
             catch (Exception ex)
             {
@@ -156,10 +157,7 @@ namespace ULTRADROID.FourthVariantTest
                 return false;
 
             int count = Helpers.Count(revolverSlot);
-
-            Log.LogInfo(
-                "[FourthVariant] Revolver slot contains " +
-                count + " entries.");
+            bool goldFoundInList = false;
 
             for (int i = 0; i < count; i++)
             {
@@ -169,27 +167,53 @@ namespace ULTRADROID.FourthVariantTest
                 if (item == null)
                     continue;
 
-                Log.LogInfo(
-                    "[FourthVariant] Revolver[" + i + "] = " +
-                    item.name);
-
                 if (item.name == "ULTRADROID_FOURTH_GOLD_REVOLVER")
+                {
                     goldRevolver = item;
+                    goldFoundInList = true;
+                }
             }
 
-            // Avoid adding another clone if this plugin is reinitializing.
-            if (goldRevolver != null)
+            // Log only when the list needs attention.
+            if (goldFoundInList)
             {
-                Log.LogInfo(
-                    "[FourthVariant] Existing Gold Revolver clone found.");
                 return true;
             }
+
+            // The game may have removed our object from the list without
+            // destroying it. If so, restore that same object instead of
+            // creating a duplicate.
+            if (goldRevolver != null)
+            {
+                if (Helpers.Add(revolverSlot, goldRevolver))
+                {
+                    Log.LogWarning(
+                        "[FourthVariant] Gold Revolver was missing from the " +
+                        "Revolver list. Restored existing object. New count=" +
+                        Helpers.Count(revolverSlot));
+
+                    return true;
+                }
+
+                Log.LogWarning(
+                    "[FourthVariant] Could not restore existing Gold Revolver.");
+            }
+
+            // No reusable Gold object is available. Only create a new clone
+            // when the list is exactly the original three vanilla variants.
+            count = Helpers.Count(revolverSlot);
+
+            Log.LogInfo(
+                "[FourthVariant] Revolver slot contains " +
+                count + " entries.");
 
             if (count != 3)
             {
                 Log.LogWarning(
-                    "[FourthVariant] Expected 3 Revolver variants, found " +
-                    count + ". No clone added.");
+                    "[FourthVariant] Gold object is missing and the Revolver " +
+                    "list has " + count +
+                    " entries. Refusing to create a potentially duplicate clone.");
+
                 return false;
             }
 
@@ -259,12 +283,13 @@ namespace ULTRADROID.FourthVariantTest
 
                 gunControl = found;
 
+                setupComplete = EnsureFourthVariant();
+
                 if (!setupComplete)
                 {
-                    setupComplete = EnsureFourthVariant();
-
-                    if (!setupComplete)
-                        return;
+                    Log.LogWarning(
+                        "[FourthVariant] Cannot select Gold: variant setup failed.");
+                    return;
                 }
 
                 // Switch to the Revolver family, then request its
