@@ -623,6 +623,7 @@ namespace ULTRADROID.Weapon7Test
                 currentPointer.ToString("X"));
 
             Weapon7Helpers.LogWeaponComponents(testWeapon, Log);
+            Weapon7Helpers.LogRevolverRuntimeState(testWeapon, Log);
 
             Log.Info(
                 "[Weapon7] ===== END POST-EQUIP DIAGNOSTICS =====");
@@ -1300,6 +1301,156 @@ namespace ULTRADROID.Weapon7Test
 
             throw new MissingMethodException(
                 instance.GetType().FullName, name);
+        }
+
+        internal static void LogRevolverRuntimeState(
+            GameObject weapon,
+            ManualLogSourceProxy log)
+        {
+            if (weapon == null || log == null)
+                return;
+
+            try
+            {
+                Type revolverType = FindType("Revolver");
+
+                if (revolverType == null)
+                {
+                    log.Warn("[Weapon7] Revolver type not found.");
+                    return;
+                }
+
+                object components = Invoke(
+                    weapon,
+                    "GetComponentsInChildren",
+                    Il2CppType.From(revolverType),
+                    true);
+
+                int count = Count(components);
+
+                if (count == 0)
+                {
+                    log.Warn(
+                        "[Weapon7] No Revolver components found on Weapon 7.");
+                    return;
+                }
+
+                log.Info(
+                    "[Weapon7] Weapon activeSelf = " + weapon.activeSelf);
+
+                log.Info(
+                    "[Weapon7] Weapon activeInHierarchy = " +
+                    weapon.activeInHierarchy);
+
+                for (int i = 0; i < count; i++)
+                {
+                    object revolver = WrapInstance(
+                        revolverType,
+                        Item(components, i));
+
+                    if (revolver == null)
+                    {
+                        log.Warn(
+                            "[Weapon7] Could not wrap Revolver component[" +
+                            i + "].");
+                        continue;
+                    }
+
+                    log.Info(
+                        "[Weapon7] ===== REVOLVER RUNTIME STATE =====");
+
+                    LogRuntimeMember(revolver, "enabled", log);
+                    LogRuntimeMember(revolver, "gunReady", log);
+                    LogRuntimeMember(revolver, "shootReady", log);
+                    LogRuntimeMember(revolver, "gunVariation", log);
+                    LogRuntimeMember(revolver, "altVersion", log);
+
+                    LogRuntimeMember(revolver, "inman", log);
+                    LogRuntimeMember(revolver, "wid", log);
+                    LogRuntimeMember(revolver, "gc", log);
+                    LogRuntimeMember(revolver, "wpos", log);
+                    LogRuntimeMember(revolver, "wc", log);
+
+                    object inman = GetMember(revolver, "inman");
+
+                    if (inman == null)
+                    {
+                        log.Warn(
+                            "[Weapon7] Revolver.inman is null.");
+                    }
+                    else
+                    {
+                        object inputSource =
+                            GetMember(inman, "InputSource");
+
+                        if (inputSource == null)
+                        {
+                            log.Warn(
+                                "[Weapon7] Revolver.inman.InputSource is null.");
+                        }
+                        else
+                        {
+                            object fire1 =
+                                GetMember(inputSource, "Fire1");
+
+                            log.Info(
+                                "[Weapon7] InputSource.Fire1 = " +
+                                (fire1 == null ? "null" : "available"));
+
+                            if (fire1 != null)
+                            {
+                                object wasPerformed = GetMember(
+                                    fire1, "WasPerformedThisFrame");
+
+                                object isPressed = GetMember(
+                                    fire1, "IsPressed");
+
+                                log.Info(
+                                    "[Weapon7] Fire1.WasPerformedThisFrame = " +
+                                    (wasPerformed == null
+                                        ? "unavailable"
+                                        : wasPerformed.ToString()));
+
+                                log.Info(
+                                    "[Weapon7] Fire1.IsPressed = " +
+                                    (isPressed == null
+                                        ? "unavailable"
+                                        : isPressed.ToString()));
+                            }
+                        }
+                    }
+
+                    log.Info(
+                        "[Weapon7] ===== END REVOLVER STATE =====");
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error(
+                    "[Weapon7] Revolver runtime diagnostics failed: " +
+                    Unwrap(ex));
+            }
+        }
+
+        private static void LogRuntimeMember(
+            object instance,
+            string memberName,
+            ManualLogSourceProxy log)
+        {
+            try
+            {
+                object value = GetMember(instance, memberName);
+
+                log.Info(
+                    "[Weapon7] " + memberName + " = " +
+                    (value == null ? "null" : value.ToString()));
+            }
+            catch (Exception ex)
+            {
+                log.Warn(
+                    "[Weapon7] Could not read " + memberName +
+                    ": " + Unwrap(ex));
+            }
         }
 
         internal static void LogWeaponComponents(
