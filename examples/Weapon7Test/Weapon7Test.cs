@@ -23,11 +23,9 @@ public sealed class Weapon7Plugin : BasePlugin
 public override void Load()
 {
 Weapon7Runtime.Log = new ManualLogSourceProxy(Log);
-
-        AddComponent<Weapon7Runtime>();
-
-        Log.LogInfo("[Weapon7] Test plugin loaded.");
-    }
+AddComponent<Weapon7Runtime>();
+Log.LogInfo("[Weapon7] Test plugin loaded.");
+}
 }
 
 internal sealed class ManualLogSourceProxy
@@ -39,14 +37,9 @@ internal sealed class ManualLogSourceProxy
         this.source = source;
     }
 
-    internal void Info(string message) =>
-        source.LogInfo(message);
-
-    internal void Warn(string message) =>
-        source.LogWarning(message);
-
-    internal void Error(string message) =>
-        source.LogError(message);
+    internal void Info(string message) => source.LogInfo(message);
+    internal void Warn(string message) => source.LogWarning(message);
+    internal void Error(string message) => source.LogError(message);
 }
 
 public sealed class Weapon7Runtime : MonoBehaviour
@@ -58,7 +51,6 @@ public sealed class Weapon7Runtime : MonoBehaviour
     private GameObject testWeapon;
 
     private IntPtr lastGunPointer = IntPtr.Zero;
-
     private int lastCheckFrame = -120;
     private int lastWaitingLogFrame = -120;
 
@@ -66,7 +58,6 @@ public sealed class Weapon7Runtime : MonoBehaviour
     private bool methodDiagnosticsLogged;
     private bool slotSetupComplete;
     private bool refreshAttempted;
-    private bool wheelDiagnosticsLogged;
 
     public Weapon7Runtime(IntPtr ptr) : base(ptr) { }
 
@@ -98,13 +89,11 @@ public sealed class Weapon7Runtime : MonoBehaviour
                     Log.Warn(
                         "[Weapon7] GunControl is no longer ready; " +
                         "waiting for reinitialization.");
-
                     ResetInstanceState();
                 }
                 else if (Time.frameCount - lastWaitingLogFrame >= 600)
                 {
                     lastWaitingLogFrame = Time.frameCount;
-
                     Log.Warn(
                         "[Weapon7] Waiting for initialized GunControl.");
                 }
@@ -120,23 +109,18 @@ public sealed class Weapon7Runtime : MonoBehaviour
             if (pointer != lastGunPointer)
             {
                 ResetInstanceState();
-
                 lastGunPointer = pointer;
                 gunControl = found;
 
-                Log.Info(
-                    "[Weapon7] Found initialized GunControl.");
+                Log.Info("[Weapon7] Found initialized GunControl.");
             }
             else
             {
                 gunControl = found;
             }
 
-            // Don't repeatedly clone or log when setup is already complete.
-            if (slotSetupComplete)
-                return;
-
-            EnsureSlot7();
+            if (!slotSetupComplete)
+                EnsureSlot7();
         }
         catch (Exception ex)
         {
@@ -151,11 +135,9 @@ public sealed class Weapon7Runtime : MonoBehaviour
         lastGunPointer = IntPtr.Zero;
         gunControl = null;
         testWeapon = null;
-
         slotSetupComplete = false;
         refreshAttempted = false;
         methodDiagnosticsLogged = false;
-        wheelDiagnosticsLogged = false;
     }
 
     private void RegisterButton()
@@ -176,7 +158,6 @@ public sealed class Weapon7Runtime : MonoBehaviour
             });
 
             buttonRegistered = true;
-
             Log.Info("[Weapon7] W7 HUD button registered.");
         }
         catch (Exception ex)
@@ -300,7 +281,6 @@ public sealed class Weapon7Runtime : MonoBehaviour
             if (!methodDiagnosticsLogged)
             {
                 methodDiagnosticsLogged = true;
-
                 Weapon7Helpers.LogRelevantMethods(
                     gunControl.GetType(), Log);
             }
@@ -328,7 +308,6 @@ public sealed class Weapon7Runtime : MonoBehaviour
                     gunControl, Log);
 
                 Weapon7Helpers.LogWheelSegments(Log);
-                wheelDiagnosticsLogged = true;
             }
 
             slotSetupComplete = true;
@@ -415,8 +394,7 @@ internal static class Weapon7Helpers
             {
                 foreach (Type candidate in assembly.GetTypes())
                 {
-                    if (candidate != null &&
-                        candidate.Name == name)
+                    if (candidate != null && candidate.Name == name)
                         return candidate;
                 }
             }
@@ -427,8 +405,7 @@ internal static class Weapon7Helpers
 
                 foreach (Type candidate in ex.Types)
                 {
-                    if (candidate != null &&
-                        candidate.Name == name)
+                    if (candidate != null && candidate.Name == name)
                         return candidate;
                 }
             }
@@ -567,7 +544,8 @@ internal static class Weapon7Helpers
                 BindingFlags.NonPublic);
 
             if (item != null)
-                return item.GetValue(collection, new object[] { index });
+                return item.GetValue(
+                    collection, new object[] { index });
         }
         catch
         {
@@ -585,8 +563,12 @@ internal static class Weapon7Helpers
 
                 ParameterInfo[] p = method.GetParameters();
 
-                if (p.Length == 1 && p[0].ParameterType == typeof(int))
-                    return method.Invoke(collection, new object[] { index });
+                if (p.Length == 1 &&
+                    p[0].ParameterType == typeof(int))
+                {
+                    return method.Invoke(
+                        collection, new object[] { index });
+                }
             }
         }
         catch
@@ -738,6 +720,8 @@ internal static class Weapon7Helpers
         }
     }
 
+    // Inspect the singleton directly instead of relying on
+    // FindObjectsOfType, which previously returned zero.
     internal static void LogWheelSegments(ManualLogSourceProxy log)
     {
         Type type = FindType("WeaponWheel");
@@ -748,35 +732,65 @@ internal static class Weapon7Helpers
             return;
         }
 
-        object found = UnityEngine.Object.FindObjectsOfType(
-            Il2CppType.From(type));
+        object wheel = null;
 
-        int wheels = Count(found);
-
-        log.Info("[Weapon7] WeaponWheel instances = " + wheels);
-
-        for (int w = 0; w < wheels; w++)
+        try
         {
-            object wheel = WrapInstance(type, Item(found, w));
-            object segments = GetMember(wheel, "segments");
+            for (Type current = type;
+                 current != null && wheel == null;
+                 current = current.BaseType)
+            {
+                PropertyInfo property = current.GetProperty(
+                    "Instance",
+                    BindingFlags.Public |
+                    BindingFlags.NonPublic |
+                    BindingFlags.Static |
+                    BindingFlags.DeclaredOnly);
+
+                if (property == null)
+                    continue;
+
+                MethodInfo getter = property.GetGetMethod(true);
+
+                if (getter != null)
+                    wheel = getter.Invoke(null, null);
+            }
+        }
+        catch (Exception ex)
+        {
+            log.Warn(
+                "[Weapon7] Singleton property lookup failed: " +
+                Unwrap(ex));
+        }
+
+        if (wheel == null)
+        {
+            log.Warn("[Weapon7] WeaponWheel.Instance is null or inaccessible.");
+            return;
+        }
+
+        object segments = GetMember(wheel, "segments");
+
+        log.Info(
+            "[Weapon7] Singleton wheel found; segments=" +
+            Count(segments));
+
+        log.Info(
+            "[Weapon7] segmentCount=" +
+            (GetMember(wheel, "segmentCount") ?? "null"));
+
+        for (int i = 0; i < Count(segments); i++)
+        {
+            object segment = Item(segments, i);
+            object descriptor = GetMember(segment, "descriptor");
+            object name = GetMember(descriptor, "weaponName");
+            object slot = GetMember(segment, "slotIndex");
 
             log.Info(
-                "[Weapon7] Wheel[" + w + "] segments = " +
-                Count(segments));
-
-            for (int i = 0; i < Count(segments); i++)
-            {
-                object segment = Item(segments, i);
-                object descriptor = GetMember(segment, "descriptor");
-                object name = GetMember(descriptor, "weaponName");
-                object slot = GetMember(segment, "slotIndex");
-
-                log.Info(
-                    "[Weapon7] Segment[" + i + "] slot=" +
-                    (slot ?? "null") +
-                    " descriptor=" + TypeName(descriptor) +
-                    " name=" + (name ?? "null"));
-            }
+                "[Weapon7] Segment[" + i + "] slot=" +
+                (slot ?? "null") +
+                " descriptor=" + TypeName(descriptor) +
+                " name=" + (name ?? "null"));
         }
     }
 
@@ -816,8 +830,9 @@ internal static class Weapon7Helpers
                     signature += p[i].ParameterType.Name;
                 }
 
-                log.Info("[Weapon7] GunControl method: " +
-                         signature + ")");
+                log.Info(
+                    "[Weapon7] GunControl method: " +
+                    signature + ")");
             }
         }
     }
