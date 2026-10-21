@@ -224,6 +224,27 @@ namespace ULTRADROID.FourthVariantTest
             if (goldFoundInList)
                 return true;
 
+            // If our previous Gold object still exists, reuse it.
+            if (goldRevolver != null)
+            {
+                if (Helpers.Add(revolverSlot, goldRevolver))
+                {
+                    lastRevolverListState = null;
+
+                    Log.LogInfo(
+                        "[FourthVariant] Restored existing Gold Revolver. " +
+                        "New count=" + Helpers.Count(revolverSlot));
+
+                    return true;
+                }
+
+                Log.LogWarning(
+                    "[FourthVariant] Existing Gold object could not be restored. " +
+                    "Will try creating a replacement.");
+
+                goldRevolver = null;
+            }
+
             // Only restore Gold when the list contains a recognized,
             // complete vanilla set for the current Marksman configuration.
             // Marksman disabled: Pierce + Twirl.
@@ -254,28 +275,6 @@ namespace ULTRADROID.FourthVariantTest
                 Log.LogWarning(
                     "[FourthVariant] Cannot find a Pierce template.");
                 return false;
-            }
-
-            // If our previous Gold object still exists, reuse it.
-            // Never append it twice.
-            if (goldRevolver != null)
-            {
-                if (Helpers.Add(revolverSlot, goldRevolver))
-                {
-                    lastRevolverListState = null;
-
-                    Log.LogInfo(
-                        "[FourthVariant] Restored existing Gold Revolver. " +
-                        "New count=" + Helpers.Count(revolverSlot));
-
-                    return true;
-                }
-
-                Log.LogWarning(
-                    "[FourthVariant] Existing Gold object could not be restored. " +
-                    "Will try creating a replacement.");
-
-                goldRevolver = null;
             }
 
             // The game may have destroyed the previous object during a rebuild.
