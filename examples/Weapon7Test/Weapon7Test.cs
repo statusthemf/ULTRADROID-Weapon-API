@@ -52,14 +52,19 @@ namespace ULTRADROID.Weapon7Test
         private GameObject testWeapon;
 
         private IntPtr lastGunPointer = IntPtr.Zero;
+
         private int lastCheckFrame = -120;
         private int lastWaitingLogFrame = -120;
+        private int equippedSeenFrame = -1;
 
         private bool buttonRegistered;
         private bool methodDiagnosticsLogged;
         private bool slotSetupComplete;
         private bool refreshAttempted;
         private bool descriptorConfigured;
+
+        // New: only run the post-equip diagnostic once per setup.
+        private bool postEquipDiagnosticsLogged;
 
         public Weapon7Runtime(IntPtr ptr) : base(ptr) { }
 
@@ -77,56 +82,65 @@ namespace ULTRADROID.Weapon7Test
 
                 RegisterButton();
 
-                if (Time.frameCount - lastCheckFrame < 120)
-                    return;
-
-                lastCheckFrame = Time.frameCount;
-
-                object found = Weapon7Helpers.FindReadyGunControl();
-
-                if (found == null)
+                if (Time.frameCount - lastCheckFrame >= 120)
                 {
-                    if (slotSetupComplete)
-                    {
-                        Log.Warn(
-                            "[Weapon7] GunControl is no longer ready; " +
-                            "waiting for reinitialization.");
+                    lastCheckFrame = Time.frameCount;
 
+                    object found =
+                        Weapon7Helpers.FindReadyGunControl();
+
+                    if (found == null)
+                    {
+                        if (slotSetupComplete)
+                        {
+                            Log.Warn(
+                                "[Weapon7] GunControl is no longer ready; " +
+                                "waiting for reinitialization.");
+
+                            ResetInstanceState();
+                        }
+                        else if (
+                            Time.frameCount -
+                            lastWaitingLogFrame >= 600)
+                        {
+                            lastWaitingLogFrame = Time.frameCount;
+
+                            Log.Warn(
+                                "[Weapon7] Waiting for initialized GunControl.");
+                        }
+
+                        return;
+                    }
+
+                    IntPtr pointer =
+                        Weapon7Helpers.GetPointer(found);
+
+                    if (pointer == IntPtr.Zero)
+                        return;
+
+                    if (pointer != lastGunPointer)
+                    {
                         ResetInstanceState();
+
+                        lastGunPointer = pointer;
+                        gunControl = found;
+
+                        Log.Info(
+                            "[Weapon7] Found initialized GunControl.");
                     }
-                    else if (
-                        Time.frameCount - lastWaitingLogFrame >= 600)
+                    else
                     {
-                        lastWaitingLogFrame = Time.frameCount;
-
-                        Log.Warn(
-                            "[Weapon7] Waiting for initialized GunControl.");
+                        gunControl = found;
                     }
 
-                    return;
+                    if (!slotSetupComplete)
+                        EnsureSlot7();
                 }
 
-                IntPtr pointer = Weapon7Helpers.GetPointer(found);
-
-                if (pointer == IntPtr.Zero)
-                    return;
-
-                if (pointer != lastGunPointer)
-                {
-                    ResetInstanceState();
-
-                    lastGunPointer = pointer;
-                    gunControl = found;
-
-                    Log.Info("[Weapon7] Found initialized GunControl.");
-                }
-                else
-                {
-                    gunControl = found;
-                }
-
-                if (!slotSetupComplete)
-                    EnsureSlot7();
+                // Check every frame after setup, not just every 120 frames.
+                // This lets us detect when the player actually equips W7.
+                if (slotSetupComplete)
+                    CheckEquippedWeaponDiagnostics();
             }
             catch (Exception ex)
             {
@@ -146,6 +160,9 @@ namespace ULTRADROID.Weapon7Test
             refreshAttempted = false;
             descriptorConfigured = false;
             methodDiagnosticsLogged = false;
+
+            equippedSeenFrame = -1;
+            postEquipDiagnosticsLogged = false;
         }
 
         private void RegisterButton()
@@ -278,6 +295,7 @@ namespace ULTRADROID.Weapon7Test
 
                     testWeapon.name = "ULTRADROID_TEST_WEAPON7";
 
+                    // Initial diagnostic: before the clone is equipped.
                     Weapon7Helpers.LogWeaponComponents(testWeapon, Log);
 
                     testWeapon.SetActive(false);
@@ -359,6 +377,83 @@ namespace ULTRADROID.Weapon7Test
             }
         }
 
+        // New: wait until W7 is actually selected, then allow 30 frames
+        // for OnEnable/Start/Update initialization before inspecting it.
+        private void CheckEquippedWeaponDiagnostics()
+        {
+            if (postEquipDiagnosticsLogged ||
+                gunControl == null ||
+                testWeapon == null)
+                return;
+
+            object currentWeapon =
+                Weapon7Helpers.GetMember(gunControl, "currentWeapon");
+
+            IntPtr currentPointer =
+                Weapon7Helpers.GetPointer(currentWeapon);
+
+            IntPtr testPointer =
+                Weapon7Helpers.GetPointer(testWeapon);
+
+            if (testPointer == IntPtr.Zero ||
+                currentPointer != testPointer)
+            {
+                equippedSeenFrame = -1;
+                return;
+            }
+
+            if (equippedSeenFrame < 0)
+            {
+                equippedSeenFrame = Time.frameCount;
+
+                Log.Info(
+                    "[Weapon7] Detected Weapon 7 as currentWeapon. " +
+                    "Waiting 30 frames before post-equip diagnostics.");
+
+                return;
+            }
+
+            if (Time.frameCount - equippedSeenFrame < 30)
+                return;
+
+            // Set before logging to prevent repeated diagnostics if an
+            // inspection throws an exception.
+            postEquipDiagnosticsLogged = true;
+
+            Log.Info(
+                "[Weapon7] ===== POST-EQUIP DIAGNOSTICS =====");
+
+            Log.Info(
+                "[Weapon7] Current slot = " +
+                (Weapon7Helpers.GetMember(
+                    gunControl, "currentSlot") ?? "null"));
+
+            Log.Info(
+                "[Weapon7] Weapon object name = " +
+                testWeapon.name);
+
+            Log.Info(
+                "[Weapon7] Weapon pointer = 0x" +
+                testPointer.ToString("X"));
+
+            Log.Info(
+                "[Weapon7] activeSelf = " +
+                testWeapon.activeSelf);
+
+            Log.Info(
+                "[Weapon7] activeInHierarchy = " +
+                testWeapon.activeInHierarchy);
+
+            Log.Info(
+                "[Weapon7] Current weapon pointer = 0x" +
+                currentPointer.ToString("X"));
+
+            Weapon7Helpers.LogWeaponComponents(testWeapon, Log);
+
+            Log.Info(
+                "[Weapon7] ===== END POST-EQUIP DIAGNOSTICS =====");
+        }
+
         private void SwitchToSlot7()
         {
             if (Log == null)
@@ -366,7 +461,8 @@ namespace ULTRADROID.Weapon7Test
 
             try
             {
-                object found = Weapon7Helpers.FindReadyGunControl();
+                object found =
+                    Weapon7Helpers.FindReadyGunControl();
 
                 if (found == null)
                 {
@@ -374,7 +470,8 @@ namespace ULTRADROID.Weapon7Test
                     return;
                 }
 
-                IntPtr pointer = Weapon7Helpers.GetPointer(found);
+                IntPtr pointer =
+                    Weapon7Helpers.GetPointer(found);
 
                 if (pointer != lastGunPointer)
                 {
@@ -390,14 +487,16 @@ namespace ULTRADROID.Weapon7Test
 
                 if (!slotSetupComplete && !EnsureSlot7())
                 {
-                    Log.Warn("[Weapon7] Slot 7 setup is incomplete.");
+                    Log.Warn(
+                        "[Weapon7] Slot 7 setup is incomplete.");
                     return;
                 }
 
                 Weapon7Helpers.Invoke(
                     gunControl, "SwitchWeapon", 7, false);
 
-                Log.Info("[Weapon7] SwitchWeapon(7, false) invoked.");
+                Log.Info(
+                    "[Weapon7] SwitchWeapon(7, false) invoked.");
             }
             catch (Exception ex)
             {
@@ -461,7 +560,8 @@ namespace ULTRADROID.Weapon7Test
 
             for (int i = 0; i < Count(found); i++)
             {
-                object candidate = WrapInstance(type, Item(found, i));
+                object candidate =
+                    WrapInstance(type, Item(found, i));
 
                 if (candidate == null)
                     continue;
@@ -626,8 +726,8 @@ namespace ULTRADROID.Weapon7Test
 
                 try
                 {
-                    MethodInfo closed = method.MakeGenericMethod(
-                        descriptorType);
+                    MethodInfo closed =
+                        method.MakeGenericMethod(descriptorType);
 
                     object result = closed.Invoke(null, null);
 
@@ -735,8 +835,8 @@ namespace ULTRADROID.Weapon7Test
                 return false;
             }
 
-            object firstIcon = WrapInstance(
-                iconType, Item(components, 0));
+            object firstIcon =
+                WrapInstance(iconType, Item(components, 0));
 
             if (firstIcon == null)
                 return false;
@@ -759,7 +859,8 @@ namespace ULTRADROID.Weapon7Test
                 return true;
             }
 
-            object newDescriptor = CreateDescriptor(descriptorType);
+            object newDescriptor =
+                CreateDescriptor(descriptorType);
 
             if (newDescriptor == null)
             {
@@ -800,8 +901,8 @@ namespace ULTRADROID.Weapon7Test
 
             for (int i = 0; i < Count(components); i++)
             {
-                object icon = WrapInstance(
-                    iconType, Item(components, i));
+                object icon =
+                    WrapInstance(iconType, Item(components, i));
 
                 if (icon == null)
                     continue;
@@ -1020,8 +1121,6 @@ namespace ULTRADROID.Weapon7Test
                 instance.GetType().FullName, name);
         }
 
-        // Diagnostic update: query actual known game component types
-        // instead of trusting generic Component wrapper GetType().
         internal static void LogWeaponComponents(
             GameObject weapon,
             ManualLogSourceProxy log)
