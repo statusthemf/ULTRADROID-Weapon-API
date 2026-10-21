@@ -77,6 +77,10 @@ namespace ULTRADROID.Weapon7Test
         private bool buttonRegistered;
         private bool methodDiagnosticsLogged;
 
+        // Prevent recalculating the wheel on every periodic check.
+        private bool slotSetupComplete;
+        private bool refreshAttempted;
+
         public Weapon7Runtime(IntPtr ptr) : base(ptr)
         {
         }
@@ -100,8 +104,6 @@ namespace ULTRADROID.Weapon7Test
 
                 lastCheckFrame = Time.frameCount;
 
-                // Find a GunControl instance whose six original slots
-                // are already initialized.
                 object found = Weapon7Helpers.FindReadyGunControl();
 
                 if (found == null)
@@ -129,11 +131,13 @@ namespace ULTRADROID.Weapon7Test
                     gunControl = found;
                     testWeapon = null;
 
+                    slotSetupComplete = false;
+                    refreshAttempted = false;
+                    methodDiagnosticsLogged = false;
+
                     Log.Info(
                         "[Weapon7] Found initialized GunControl: " +
                         Weapon7Helpers.TypeName(found));
-
-                    methodDiagnosticsLogged = false;
                 }
                 else
                 {
@@ -199,7 +203,6 @@ namespace ULTRADROID.Weapon7Test
 
                 int slotCount = Weapon7Helpers.Count(slots);
 
-                // Never modify the list until all original slots exist.
                 if (slotCount < 6)
                 {
                     Log.Warn(
@@ -222,7 +225,6 @@ namespace ULTRADROID.Weapon7Test
                     return false;
                 }
 
-                // Reuse our temporary weapon if it is already in slot 7.
                 if (slot7 != null && testWeapon == null)
                 {
                     int existingCount = Weapon7Helpers.Count(slot7);
@@ -241,7 +243,6 @@ namespace ULTRADROID.Weapon7Test
                     }
                 }
 
-                // Create the seventh list only when necessary.
                 if (slotCount < 7)
                 {
                     Type slotsType = slots.GetType();
@@ -297,7 +298,6 @@ namespace ULTRADROID.Weapon7Test
                     return false;
                 }
 
-                // Find a real in-game weapon to use as a temporary clone.
                 if (testWeapon == null)
                 {
                     GameObject template =
@@ -340,16 +340,6 @@ namespace ULTRADROID.Weapon7Test
                         "[Weapon7] Added temporary weapon to slot 7.");
                 }
 
-                // Do not invoke UpdateWeaponList() here.
-                // The current runtime reflection cannot find that method.
-                // First verify whether SwitchWeapon can use the modified list.
-
-                Log.Info(
-                    "[Weapon7] Slot setup complete. Outer slot count = " +
-                    Weapon7Helpers.Count(slots) +
-                    ", slot 7 weapon count = " +
-                    Weapon7Helpers.Count(slot7));
-
                 if (!methodDiagnosticsLogged)
                 {
                     methodDiagnosticsLogged = true;
@@ -358,6 +348,38 @@ namespace ULTRADROID.Weapon7Test
                         gunControl.GetType(),
                         Log);
                 }
+
+                // Experimental: recalculate the wheel once after slot setup.
+                // This does not change the Controls API.
+                if (!refreshAttempted)
+                {
+                    refreshAttempted = true;
+
+                    try
+                    {
+                        object result = Weapon7Helpers.Invoke(
+                            gunControl,
+                            "CalculateSlotCount");
+
+                        Log.Info(
+                            "[Weapon7] CalculateSlotCount invoked after " +
+                            "slot 7 setup.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warn(
+                            "[Weapon7] CalculateSlotCount invocation failed: " +
+                            Weapon7Helpers.Unwrap(ex));
+                    }
+                }
+
+                slotSetupComplete = true;
+
+                Log.Info(
+                    "[Weapon7] Slot setup complete. Outer slot count = " +
+                    Weapon7Helpers.Count(slots) +
+                    ", slot 7 weapon count = " +
+                    Weapon7Helpers.Count(slot7));
 
                 return true;
             }
@@ -400,8 +422,6 @@ namespace ULTRADROID.Weapon7Test
                     return;
                 }
 
-                // This is the original experimental call.
-                // Its success still needs to be verified in-game.
                 Weapon7Helpers.Invoke(
                     gunControl,
                     "SwitchWeapon",
@@ -480,8 +500,6 @@ namespace ULTRADROID.Weapon7Test
 
             int count = Count(found);
 
-            // Search every instance instead of blindly using element zero.
-            // The first instance may not have its weapon slots initialized.
             for (int i = 0; i < count; i++)
             {
                 object raw = Item(found, i);
@@ -716,8 +734,6 @@ namespace ULTRADROID.Weapon7Test
             return false;
         }
 
-        // Static helper: keeping object parameters out of MonoBehaviour
-        // methods avoids the IL2CPP method-registration warning.
         internal static GameObject FindTemplateWeapon(object slots)
         {
             int limit = Math.Min(6, Count(slots));
