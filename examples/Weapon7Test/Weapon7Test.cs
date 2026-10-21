@@ -55,6 +55,12 @@ namespace ULTRADROID.Weapon7Test
         private int lastCheckFrame = -120;
         private int lastWaitingLogFrame = -120;
         private int equippedSeenFrame = -1;
+        private int lastFireInputLogFrame = -1;
+
+        // Fire-input probe caching
+        private object cachedPlayerInput;
+        private int lastInputSearchFrame = -120;
+        private int lastProbeWarningFrame = -120;
 
         private bool buttonRegistered;
         private bool methodDiagnosticsLogged;
@@ -72,6 +78,8 @@ namespace ULTRADROID.Weapon7Test
 
             try
             {
+                ProbeIndependentFireInput();
+
                 string scene = SceneManager.GetActiveScene().name;
 
                 if (scene == "Bootstrap" || scene == "Intro")
@@ -158,6 +166,11 @@ namespace ULTRADROID.Weapon7Test
 
             equippedSeenFrame = -1;
             postEquipDiagnosticsLogged = false;
+
+            // Reset fire-input probe state
+            lastFireInputLogFrame = -1;
+            cachedPlayerInput = null;
+            lastInputSearchFrame = -120;
         }
 
         private void RegisterButton()
@@ -368,6 +381,96 @@ namespace ULTRADROID.Weapon7Test
                     Weapon7Helpers.Unwrap(ex));
 
                 return false;
+            }
+        }
+
+        private void ProbeIndependentFireInput()
+        {
+            try
+            {
+                if (cachedPlayerInput == null ||
+                    Time.frameCount - lastInputSearchFrame >= 120)
+                {
+                    lastInputSearchFrame = Time.frameCount;
+                    cachedPlayerInput = null;
+
+                    Type inputType =
+                        Weapon7Helpers.FindType("PlayerInput");
+
+                    if (inputType == null)
+                        return;
+
+                    object inputs = UnityEngine.Object.FindObjectsOfType(
+                        Il2CppType.From(inputType));
+
+                    for (int i = 0; i < Weapon7Helpers.Count(inputs); i++)
+                    {
+                        object candidate =
+                            Weapon7Helpers.WrapForDiagnostics(
+                                inputType,
+                                Weapon7Helpers.Item(inputs, i));
+
+                        if (candidate == null)
+                            continue;
+
+                        object fireAction =
+                            Weapon7Helpers.GetMember(candidate, "Fire1");
+
+                        if (fireAction == null)
+                            continue;
+
+                        cachedPlayerInput = candidate;
+                        break;
+                    }
+                }
+
+                if (cachedPlayerInput == null)
+                    return;
+
+                object fire1 = Weapon7Helpers.GetMember(
+                    cachedPlayerInput, "Fire1");
+
+                if (fire1 == null)
+                {
+                    cachedPlayerInput = null;
+                    return;
+                }
+
+                object performedValue = Weapon7Helpers.GetMember(
+                    fire1, "WasPerformedThisFrame");
+
+                object pressedValue = Weapon7Helpers.GetMember(
+                    fire1, "IsPressed");
+
+                bool performed =
+                    performedValue is bool p && p;
+
+                bool pressed =
+                    pressedValue is bool h && h;
+
+                if ((performed || pressed) &&
+                    Time.frameCount - lastFireInputLogFrame >= 30)
+                {
+                    lastFireInputLogFrame = Time.frameCount;
+
+                    Log.Info(
+                        "[Weapon7] Fire1 detected: " +
+                        "performed=" + performed +
+                        ", pressed=" + pressed);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (Time.frameCount - lastProbeWarningFrame >= 300)
+                {
+                    lastProbeWarningFrame = Time.frameCount;
+
+                    Log.Warn(
+                        "[Weapon7] Fire input probe failed: " +
+                        Weapon7Helpers.Unwrap(ex));
+                }
+
+                cachedPlayerInput = null;
             }
         }
 
@@ -589,6 +692,13 @@ namespace ULTRADROID.Weapon7Test
             return ctor == null
                 ? null
                 : ctor.Invoke(new object[] { native.Pointer });
+        }
+
+        internal static object WrapForDiagnostics(
+            Type type,
+            object raw)
+        {
+            return WrapInstance(type, raw);
         }
 
         internal static IntPtr GetPointer(object value)
