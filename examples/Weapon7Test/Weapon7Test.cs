@@ -125,10 +125,17 @@ namespace ULTRADROID.Weapon7Test
 
                     if (pointer != lastGunPointer)
                     {
+                        IntPtr previousPointer = lastGunPointer;
+
                         ResetInstanceState();
 
                         lastGunPointer = pointer;
                         gunControl = found;
+
+                        Log.Info(
+                            "[Weapon7] GunControl instance changed: old=0x" +
+                            previousPointer.ToString("X") +
+                            ", new=0x" + pointer.ToString("X"));
 
                         Log.Info(
                             "[Weapon7] Found initialized GunControl.");
@@ -535,9 +542,11 @@ namespace ULTRADROID.Weapon7Test
                     lastFireInputLogFrame = Time.frameCount;
 
                     Log.Info(
-                        "[Weapon7] Fire1 detected: " +
+                        "[Weapon7] GLOBAL Fire1: " +
                         "performed=" + performed +
                         ", pressed=" + pressed);
+
+                    LogWeapon7InputComparison(fire1, performed, pressed);
                 }
             }
             catch (Exception ex)
@@ -552,6 +561,147 @@ namespace ULTRADROID.Weapon7Test
                 }
 
                 cachedPlayerInput = null;
+            }
+        }
+
+        private void LogWeapon7InputComparison(
+            object globalFire1,
+            bool globalPerformed,
+            bool globalPressed)
+        {
+            try
+            {
+                if (testWeapon == null)
+                {
+                    Log.Info(
+                        "[Weapon7] Input comparison skipped: " +
+                        "testWeapon is null.");
+                    return;
+                }
+
+                Type revolverType =
+                    Weapon7Helpers.FindType("Revolver");
+
+                if (revolverType == null)
+                {
+                    Log.Warn(
+                        "[Weapon7] Input comparison: Revolver type not found.");
+                    return;
+                }
+
+                object components = Weapon7Helpers.Invoke(
+                    testWeapon,
+                    "GetComponentsInChildren",
+                    Il2CppType.From(revolverType),
+                    true);
+
+                if (Weapon7Helpers.Count(components) == 0)
+                {
+                    Log.Warn(
+                        "[Weapon7] Input comparison: no Revolver component.");
+                    return;
+                }
+
+                object revolver = Weapon7Helpers.WrapForDiagnostics(
+                    revolverType,
+                    Weapon7Helpers.Item(components, 0));
+
+                if (revolver == null)
+                {
+                    Log.Warn(
+                        "[Weapon7] Input comparison: could not wrap Revolver.");
+                    return;
+                }
+
+                object inman =
+                    Weapon7Helpers.GetMember(revolver, "inman");
+
+                object cloneInput =
+                    Weapon7Helpers.GetMember(inman, "InputSource");
+
+                object cloneFire1 =
+                    Weapon7Helpers.GetMember(cloneInput, "Fire1");
+
+                object clonePerformedValue =
+                    Weapon7Helpers.GetMember(
+                        cloneFire1, "WasPerformedThisFrame");
+
+                object clonePressedValue =
+                    Weapon7Helpers.GetMember(
+                        cloneFire1, "IsPressed");
+
+                string clonePerformed =
+                    clonePerformedValue == null
+                        ? "unavailable"
+                        : clonePerformedValue.ToString();
+
+                string clonePressed =
+                    clonePressedValue == null
+                        ? "unavailable"
+                        : clonePressedValue.ToString();
+
+                IntPtr globalInputPointer =
+                    Weapon7Helpers.GetPointer(cachedPlayerInput);
+
+                IntPtr cloneInputPointer =
+                    Weapon7Helpers.GetPointer(cloneInput);
+
+                IntPtr globalFirePointer =
+                    Weapon7Helpers.GetPointer(globalFire1);
+
+                IntPtr cloneFirePointer =
+                    Weapon7Helpers.GetPointer(cloneFire1);
+
+                bool sameInput =
+                    globalInputPointer != IntPtr.Zero &&
+                    cloneInputPointer != IntPtr.Zero
+                        ? globalInputPointer == cloneInputPointer
+                        : ReferenceEquals(cachedPlayerInput, cloneInput);
+
+                bool sameFire =
+                    globalFirePointer != IntPtr.Zero &&
+                    cloneFirePointer != IntPtr.Zero
+                        ? globalFirePointer == cloneFirePointer
+                        : ReferenceEquals(globalFire1, cloneFire1);
+
+                object currentWeapon =
+                    Weapon7Helpers.GetMember(
+                        gunControl, "currentWeapon");
+
+                bool isCurrent =
+                    Weapon7Helpers.GetPointer(currentWeapon) ==
+                    Weapon7Helpers.GetPointer(testWeapon);
+
+                Log.Info(
+                    "[Weapon7] W7 INPUT COMPARISON frame=" +
+                    Time.frameCount);
+
+                Log.Info(
+                    "[Weapon7] Global Fire1: performed=" +
+                    globalPerformed + ", pressed=" + globalPressed);
+
+                Log.Info(
+                    "[Weapon7] W7 Fire1: performed=" +
+                    clonePerformed + ", pressed=" + clonePressed);
+
+                Log.Info(
+                    "[Weapon7] Same PlayerInput object=" + sameInput +
+                    " | global=0x" + globalInputPointer.ToString("X") +
+                    " | W7=0x" + cloneInputPointer.ToString("X"));
+
+                Log.Info(
+                    "[Weapon7] Same Fire1 object=" + sameFire +
+                    " | global=0x" + globalFirePointer.ToString("X") +
+                    " | W7=0x" + cloneFirePointer.ToString("X"));
+
+                Log.Info(
+                    "[Weapon7] W7 is current weapon=" + isCurrent);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn(
+                    "[Weapon7] Input comparison failed: " +
+                    Weapon7Helpers.Unwrap(ex));
             }
         }
 
