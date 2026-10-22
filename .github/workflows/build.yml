@@ -47,9 +47,22 @@ jobs:
       - name: Build Weapon API
         run: dotnet build src/ULTRADROID.Weapon.API/ULTRADROID.Weapon.API.csproj --configuration Release --no-restore
 
+      - name: Restore Weapon API Example
+        run: dotnet restore examples/WeaponApiExample/WeaponApiExample.csproj
+
+      - name: Build Weapon API Example
+        run: dotnet build examples/WeaponApiExample/WeaponApiExample.csproj --configuration Release --no-restore
+
       - name: Upload Weapon API
         uses: actions/upload-artifact@v4
         with:
           name: ULTRADROID-Weapon-API
           path: src/ULTRADROID.Weapon.API/bin/Release/net10.0/ULTRADROID.Weapon.API.dll
+          if-no-files-found: error
+
+      - name: Upload Weapon API Example
+        uses: actions/upload-artifact@v4
+        with:
+          name: ULTRADROID-Weapon-API-Example
+          path: examples/WeaponApiExample/bin/Release/net10.0/ULTRADROID.WeaponApiExample.dll
           if-no-files-found: error
