@@ -1,34 +1,30 @@
 
 using System;
 using System.Reflection;
-using BepInEx.Logging;
 
 namespace ULTRADROID.Weapon.API
 {
     /// <summary>
-    /// Entry point for integrating registered weapon definitions
-    /// with ULTRAKILL's native weapon system.
-    ///
-    /// Game-specific operations are isolated here so that the public
-    /// weapon definitions and registry remain independent of the game.
+    /// Connects the weapon API to ULTRAKILL's native weapon system.
+    /// Logging is supplied by the host plugin to avoid a direct
+    /// BepInEx dependency in the public API.
     /// </summary>
     public sealed class WeaponGameRuntime
     {
-        private readonly ManualLogSource log;
+        private readonly Action<string> log;
 
         public bool IsInitialized { get; private set; }
 
         public object GunControlInstance { get; private set; }
 
-        public WeaponGameRuntime(ManualLogSource logger)
+        public WeaponGameRuntime(Action<string> logger)
         {
-            log = logger ??
-                throw new ArgumentNullException(nameof(logger));
+            log = logger ?? (_ => { });
         }
 
         /// <summary>
         /// Attempts to locate the initialized GunControl singleton.
-        /// Call this after the game has initialized its weapon system.
+        /// Call again if the game has not initialized it yet.
         /// </summary>
         public bool TryInitialize()
         {
@@ -38,9 +34,7 @@ namespace ULTRADROID.Weapon.API
 
                 if (gunControlType == null)
                 {
-                    log.LogWarning(
-                        "[Weapon API Runtime] GunControl type not found.");
-
+                    Log("GunControl type not found.");
                     return false;
                 }
 
@@ -48,41 +42,43 @@ namespace ULTRADROID.Weapon.API
 
                 if (instance == null)
                 {
-                    log.LogInfo(
-                        "[Weapon API Runtime] GunControl is not initialized yet.");
-
+                    Log("GunControl is not initialized yet.");
                     return false;
                 }
 
                 GunControlInstance = instance;
                 IsInitialized = true;
 
-                log.LogInfo(
-                    "[Weapon API Runtime] Connected to GunControl.");
-
+                Log("Connected to GunControl.");
                 return true;
             }
             catch (Exception ex)
             {
-                log.LogError(
-                    "[Weapon API Runtime] Initialization failed: " + ex);
-
                 IsInitialized = false;
                 GunControlInstance = null;
 
+                Log("Initialization failed: " + ex);
                 return false;
             }
         }
 
-        /// <summary>
-        /// Returns a registered weapon definition by ID.
-        /// This does not yet create a native in-game weapon.
-        /// </summary>
         public bool TryGetWeapon(
             string weaponId,
             out WeaponDefinition definition)
         {
             return WeaponRegistry.TryGet(weaponId, out definition);
+        }
+
+        private void Log(string message)
+        {
+            try
+            {
+                log("[ULTRADROID Weapon API] " + message);
+            }
+            catch
+            {
+                // A logging failure must not crash the game.
+            }
         }
 
         private static Type FindType(string typeName)
@@ -91,10 +87,7 @@ namespace ULTRADROID.Weapon.API
             {
                 try
                 {
-                    Type type = assembly.GetType(
-                        typeName,
-                        throwOnError: false,
-                        ignoreCase: false);
+                    Type type = assembly.GetType(typeName, false, false);
 
                     if (type != null)
                         return type;
@@ -107,6 +100,9 @@ namespace ULTRADROID.Weapon.API
                 }
                 catch (ReflectionTypeLoadException ex)
                 {
+                    if (ex.Types == null)
+                        continue;
+
                     foreach (Type candidate in ex.Types)
                     {
                         if (candidate != null &&
@@ -132,8 +128,7 @@ namespace ULTRADROID.Weapon.API
                  current = current.BaseType)
             {
                 if (!current.IsGenericType ||
-                    current.GetGenericTypeDefinition().Name !=
-                        "MonoSingleton`1")
+                    current.GetGenericTypeDefinition().Name != "MonoSingleton`1")
                 {
                     continue;
                 }
