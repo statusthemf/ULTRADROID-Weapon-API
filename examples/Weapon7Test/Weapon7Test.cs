@@ -1,3 +1,5 @@
+using System.IO;
+using ULTRADROID.Models;
 using System;
 using System.Reflection;
 using BepInEx;
@@ -49,6 +51,7 @@ namespace ULTRADROID.Weapon7Test
         private ButtonHandle button;
         private object gunControl;
         private GameObject testWeapon;
+        private GameObject loadedCustomModel;
 
         private IntPtr lastGunPointer = IntPtr.Zero;
 
@@ -214,6 +217,60 @@ namespace ULTRADROID.Weapon7Test
             }
         }
 
+        private void EnsureCustomModel()
+        {
+            if (testWeapon == null)
+                return;
+
+            // Don't load the same model twice onto the same weapon.
+            if (loadedCustomModel != null &&
+                loadedCustomModel.transform.parent == testWeapon.transform)
+                return;
+
+            if (loadedCustomModel != null)
+            {
+                UnityEngine.Object.Destroy(loadedCustomModel);
+                loadedCustomModel = null;
+            }
+
+            string path = Path.Combine(
+                Paths.PluginPath,
+                "ULTRADROID_TEST_WEAPON.glb");
+
+            if (!File.Exists(path))
+            {
+                Log.Warn("[Weapon7 Model] GLB not found: " + path);
+                return;
+            }
+
+            try
+            {
+                ModelLoadOptions options = new ModelLoadOptions
+                {
+                    Name = "ULTRADROID_TestWeapon_Model",
+                    Position = Vector3.zero,
+                    RotationEuler = Vector3.zero,
+                    Scale = new Vector3(0.05f, 0.05f, 0.05f),
+                    LoadTextures = true,
+                    CreateColliders = false
+                };
+
+                loadedCustomModel = ModelAPI.LoadGLB(
+                    path,
+                    testWeapon.transform,
+                    options);
+
+                Log.Info(
+                    "[Weapon7 Model] GLB loaded successfully: " +
+                    loadedCustomModel.name);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(
+                    "[Weapon7 Model] Failed to load GLB: " + ex);
+            }
+        }
+
         private bool EnsureSlot7()
         {
             if (gunControl == null)
@@ -375,6 +432,8 @@ namespace ULTRADROID.Weapon7Test
 
                     Weapon7Helpers.LogWheelSegments(Log);
                 }
+
+                EnsureCustomModel();
 
                 slotSetupComplete = true;
 
