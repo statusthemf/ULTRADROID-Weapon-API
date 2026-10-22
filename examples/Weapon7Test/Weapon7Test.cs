@@ -1035,11 +1035,78 @@ namespace ULTRADROID.Weapon7Test
             Weapon7Helpers.LogWeaponComponents(testWeapon, Log);
             Weapon7Helpers.LogRevolverRuntimeState(testWeapon, Log);
             LogWeapon7Renderers(testWeapon);
+            LogWeapon7Hierarchy(testWeapon);
             LogWeapon7ColorGetterState(testWeapon);
             ApplyWeapon7GoldTint(testWeapon);
 
             Log.Info(
                 "[Weapon7] ===== END POST-EQUIP DIAGNOSTICS =====");
+        }
+
+        private void LogWeapon7Hierarchy(GameObject weapon)
+        {
+            if (weapon == null)
+            {
+                Log.Warn("[W7 MODEL] Weapon is null.");
+                return;
+            }
+
+            Log.Info("[W7 MODEL] ===== HIERARCHY BEGIN =====");
+            Log.Info("[W7 MODEL] Root: " + weapon.name);
+
+            Transform[] transforms =
+                weapon.GetComponentsInChildren<Transform>(true);
+
+            Log.Info(
+                "[W7 MODEL] Total transforms: " + transforms.Length);
+
+            foreach (Transform child in transforms)
+            {
+                if (child == null)
+                    continue;
+
+                GameObject obj = child.gameObject;
+
+                string path = obj.name;
+                Transform parent = child.parent;
+
+                while (parent != null && parent != weapon.transform)
+                {
+                    path = parent.name + "/" + path;
+                    parent = parent.parent;
+                }
+
+                if (parent == weapon.transform)
+                    path = weapon.name + "/" + path;
+
+                MeshFilter meshFilter = obj.GetComponent<MeshFilter>();
+                MeshRenderer meshRenderer = obj.GetComponent<MeshRenderer>();
+                SkinnedMeshRenderer skinnedRenderer =
+                    obj.GetComponent<SkinnedMeshRenderer>();
+
+                string meshName =
+                    meshFilter != null && meshFilter.sharedMesh != null
+                        ? meshFilter.sharedMesh.name
+                        : "<none>";
+
+                string skinnedMeshName =
+                    skinnedRenderer != null &&
+                    skinnedRenderer.sharedMesh != null
+                        ? skinnedRenderer.sharedMesh.name
+                        : "<none>";
+
+                Log.Info(
+                    "[W7 MODEL] Object=" + path +
+                    " | activeSelf=" + obj.activeSelf +
+                    " | activeInHierarchy=" + obj.activeInHierarchy +
+                    " | MeshFilter=" + (meshFilter != null) +
+                    " | Mesh=" + meshName +
+                    " | MeshRenderer=" + (meshRenderer != null) +
+                    " | SkinnedMeshRenderer=" + (skinnedRenderer != null) +
+                    " | SkinnedMesh=" + skinnedMeshName);
+            }
+
+            Log.Info("[W7 MODEL] ===== HIERARCHY END =====");
         }
 
         private void LogLiveWeaponState()
