@@ -251,9 +251,9 @@ namespace ULTRADROID.Weapon7Test
                 ModelLoadOptions options = new ModelLoadOptions
                 {
                     Name = "ULTRADROID_TestWeapon_Model",
-                    Position = Vector3.zero,
+                    Position = new Vector3(0f, 0f, 1f),
                     RotationEuler = Vector3.zero,
-                    Scale = new Vector3(0.05f, 0.05f, 0.05f),
+                    Scale = new Vector3(0.5f, 0.5f, 0.5f),
                     LoadTextures = true,
                     CreateColliders = false
                 };
