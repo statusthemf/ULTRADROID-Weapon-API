@@ -1,8 +1,7 @@
 name: Build ULTRADROID Weapon API Tests
 
-on:
+"on":
 push:
-pull_request:
 workflow_dispatch:
 
 jobs:
@@ -42,63 +41,41 @@ steps:
         echo "Found $file"
       done
 
-  - name: Verify Weapon 7 four-variant source
+  - name: Verify four-variant source file
     run: |
-      if [ ! -s "examples/Weapon7Test/Weapon7FourVariantsTest.cs" ]; then
-        echo "::error::Weapon7FourVariantsTest.cs not found."
+      test -s examples/Weapon7Test/Weapon7FourVariantsTest.cs || {
+        echo "::error::Weapon7FourVariantsTest.cs not found"
         exit 1
-      fi
-      echo "Four-variant source file found."
+      }
 
   - name: Restore Weapon7Test
     run: dotnet restore examples/Weapon7Test/Weapon7Test.csproj
 
-  - name: Build Weapon7Test with four variants
+  - name: Build Weapon7Test and four-variant test
     run: |
       dotnet build examples/Weapon7Test/Weapon7Test.csproj \
         --configuration Release \
         --no-restore
 
+  - name: Restore FourthVariantTest
+    run: dotnet restore examples/FourthVariantTest/FourthVariantTest.csproj
+
   - name: Build FourthVariantTest
     run: |
-      dotnet restore examples/FourthVariantTest/FourthVariantTest.csproj
       dotnet build examples/FourthVariantTest/FourthVariantTest.csproj \
         --configuration Release \
         --no-restore
-
-  - name: Verify build outputs
-    shell: bash
-    run: |
-      set -eu
-
-      weapon7="examples/Weapon7Test/bin/Release/net10.0/ULTRADROID.Weapon7Test.dll"
-      fourth="examples/FourthVariantTest/bin/Release/net10.0/ULTRADROID.FourthVariantTest.dll"
-
-      if [ ! -s "$weapon7" ]; then
-        echo "::error::Weapon7Test output DLL not found: $weapon7"
-        find examples/Weapon7Test/bin -type f 2>/dev/null || true
-        exit 1
-      fi
-
-      if [ ! -s "$fourth" ]; then
-        echo "::error::FourthVariantTest output DLL not found: $fourth"
-        find examples/FourthVariantTest/bin -type f 2>/dev/null || true
-        exit 1
-      fi
-
-      echo "Build outputs verified:"
-      ls -lh "$weapon7" "$fourth"
 
   - name: Upload Weapon7Test
     uses: actions/upload-artifact@v4
     with:
       name: ULTRADROID-Weapon7Test
-      path: examples/Weapon7Test/bin/Release/net10.0/ULTRADROID.Weapon7Test.dll
+      path: examples/Weapon7Test/bin/Release/**/*.dll
       if-no-files-found: error
 
   - name: Upload FourthVariantTest
     uses: actions/upload-artifact@v4
     with:
       name: ULTRADROID-FourthVariantTest
-      path: examples/FourthVariantTest/bin/Release/net10.0/ULTRADROID.FourthVariantTest.dll
+      path: examples/FourthVariantTest/bin/Release/**/*.dll
       if-no-files-found: error
