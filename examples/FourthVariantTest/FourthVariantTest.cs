@@ -1,3 +1,4 @@
+
 using System;
 using System.Reflection;
 using BepInEx;
@@ -100,8 +101,7 @@ namespace ULTRADROID.FourthVariantTest
                     gunControl = found;
                 }
 
-                // The game may rebuild weapon lists after shop changes.
-                // Check and repair the fourth variant on every scheduled check.
+                // Repair the fourth variant if the game rebuilds its lists.
                 setupComplete = EnsureFourthVariant();
 
                 if (setupComplete)
@@ -170,7 +170,6 @@ namespace ULTRADROID.FourthVariantTest
 
             string listState = "Count=" + count;
 
-            // Inspect the current list and identify its vanilla variants.
             for (int i = 0; i < count; i++)
             {
                 GameObject item =
@@ -245,11 +244,9 @@ namespace ULTRADROID.FourthVariantTest
                     listState);
             }
 
-            // Already registered: nothing to repair.
             if (goldFoundInList)
                 return true;
 
-            // If our previous Gold object still exists, reuse it.
             if (goldRevolver != null)
             {
                 if (Helpers.Add(revolverSlot, goldRevolver))
@@ -270,10 +267,6 @@ namespace ULTRADROID.FourthVariantTest
                 goldRevolver = null;
             }
 
-            // Only restore Gold when the list contains a recognized,
-            // complete vanilla set for the current Marksman configuration.
-            // Marksman disabled: Pierce + Twirl.
-            // Marksman enabled: Pierce + Ricochet + Twirl.
             bool validTwoVariantList =
                 count == 2 &&
                 hasPierce &&
@@ -286,12 +279,11 @@ namespace ULTRADROID.FourthVariantTest
                 hasRicochet &&
                 hasTwirl;
 
-            // If the game is rebuilding the vanilla list, we can still
-            // recreate Gold from the previously cached Pierce template.
             if (pierceTemplate == null)
             {
                 Log.LogWarning(
-                    "[FourthVariant] Pierce template is unavailable. Count=" + count);
+                    "[FourthVariant] Pierce template is unavailable. Count=" +
+                    count);
 
                 return false;
             }
@@ -299,13 +291,11 @@ namespace ULTRADROID.FourthVariantTest
             if (!validTwoVariantList && !validThreeVariantList)
             {
                 Log.LogInfo(
-                    "[FourthVariant] Vanilla list is incomplete (Count=" + count +
+                    "[FourthVariant] Vanilla list is incomplete (Count=" +
+                    count +
                     "). Attempting recovery using the cached Pierce template.");
             }
 
-            // The game may have destroyed the previous object during a rebuild.
-            // Recreate it from the Pierce variant, even when Marksman is disabled
-            // and only two vanilla entries remain.
             GameObject newGold =
                 UnityEngine.Object.Instantiate(pierceTemplate);
 
@@ -463,29 +453,96 @@ namespace ULTRADROID.FourthVariantTest
                 }
 
                 gunControl = found;
-
                 setupComplete = EnsureFourthVariant();
 
-                if (!setupComplete)
+                if (!setupComplete || goldRevolver == null)
                 {
                     Log.LogWarning(
-                        "[FourthVariant] Cannot select Gold: variant setup failed.");
+                        "[FourthVariant] Cannot select Gold: setup failed.");
                     return;
                 }
 
-                // Switch to the Revolver family, then request its
-                // fourth variant. The game may still need additional
-                // firing-logic changes for a true Gold variant.
+                Log.LogInfo("[FourthVariant] === BEFORE SWITCH ===");
+                LogSelectionState();
+
                 Helpers.Invoke(gunControl, "SwitchWeapon", 1, false);
                 Helpers.Invoke(gunControl, "SwitchVariant", 4);
 
+                Log.LogInfo("[FourthVariant] === AFTER SWITCH ===");
+                LogSelectionState();
+
                 Log.LogInfo(
-                    "[FourthVariant] Requested Revolver variant 4.");
+                    "[FourthVariant] SwitchVariant(4) call completed.");
             }
             catch (Exception ex)
             {
                 Log.LogError(
                     "[FourthVariant] Selection failed: " +
+                    Helpers.Unwrap(ex));
+            }
+        }
+
+        private void LogSelectionState()
+        {
+            try
+            {
+                object slot = Helpers.GetMember(gunControl, "currentSlot");
+                object variation = Helpers.GetMember(
+                    gunControl, "currentVariation");
+                object current = Helpers.GetMember(
+                    gunControl, "currentWeapon");
+
+                GameObject currentObject = current as GameObject;
+
+                string currentName = currentObject != null
+                    ? currentObject.name
+                    : current == null
+                        ? "<null>"
+                        : current.GetType().FullName;
+
+                string currentPointer = currentObject != null
+                    ? currentObject.GetInstanceID().ToString()
+                    : "n/a";
+
+                string goldName = goldRevolver != null
+                    ? goldRevolver.name
+                    : "<null>";
+
+                string goldPointer = goldRevolver != null
+                    ? goldRevolver.GetInstanceID().ToString()
+                    : "n/a";
+
+                string goldActive = goldRevolver != null
+                    ? goldRevolver.activeSelf.ToString()
+                    : "n/a";
+
+                string goldActiveInHierarchy = goldRevolver != null
+                    ? goldRevolver.activeInHierarchy.ToString()
+                    : "n/a";
+
+                bool currentIsGold =
+                    currentObject != null &&
+                    goldRevolver != null &&
+                    currentObject.GetInstanceID() ==
+                    goldRevolver.GetInstanceID();
+
+                Log.LogInfo(
+                    "[FourthVariant] State: " +
+                    "currentSlot=" + slot +
+                    " | currentVariation=" + variation +
+                    " | currentWeapon=" + currentName +
+                    " | currentWeaponID=" + currentPointer +
+                    " | CurrentIsGold=" + currentIsGold +
+                    " | GoldName=" + goldName +
+                    " | GoldID=" + goldPointer +
+                    " | GoldActiveSelf=" + goldActive +
+                    " | GoldActiveInHierarchy=" +
+                    goldActiveInHierarchy);
+            }
+            catch (Exception ex)
+            {
+                Log.LogError(
+                    "[FourthVariant] State diagnostics failed: " +
                     Helpers.Unwrap(ex));
             }
         }
@@ -522,7 +579,7 @@ namespace ULTRADROID.FourthVariantTest
                         if (candidate != null &&
                             candidate.Name == name)
                             return candidate;
-                    }
+                        }
                 }
                 catch
                 {
