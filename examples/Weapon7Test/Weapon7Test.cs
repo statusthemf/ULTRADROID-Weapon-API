@@ -222,10 +222,12 @@ namespace ULTRADROID.Weapon7Test
             if (testWeapon == null)
                 return;
 
-            // Don't load the same model twice onto the same weapon.
             if (loadedCustomModel != null &&
                 loadedCustomModel.transform.parent == testWeapon.transform)
+            {
+                HideVanillaWeaponMeshes();
                 return;
+            }
 
             if (loadedCustomModel != null)
             {
@@ -260,15 +262,66 @@ namespace ULTRADROID.Weapon7Test
                     testWeapon.transform,
                     options);
 
+                if (loadedCustomModel == null)
+                {
+                    Log.Error(
+                        "[Weapon7 Model] ModelAPI.LoadGLB returned null.");
+                    return;
+                }
+
                 Log.Info(
-                    "[Weapon7 Model] GLB loaded successfully: " +
+                    "[Weapon7 Model] GLB loaded: " +
                     loadedCustomModel.name);
+
+                HideVanillaWeaponMeshes();
+
+                Log.Info(
+                    "[Weapon7 Model] Custom model renderers=" +
+                    loadedCustomModel.GetComponentsInChildren<Renderer>(true).Length);
             }
             catch (Exception ex)
             {
                 Log.Error(
-                    "[Weapon7 Model] Failed to load GLB: " + ex);
+                    "[Weapon7 Model] Failed to load GLB: " +
+                    Weapon7Helpers.Unwrap(ex));
             }
+        }
+
+        private void HideVanillaWeaponMeshes()
+        {
+            if (testWeapon == null || loadedCustomModel == null)
+                return;
+
+            Renderer[] renderers =
+                testWeapon.GetComponentsInChildren<Renderer>(true);
+
+            int hidden = 0;
+
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null)
+                    continue;
+
+                Transform rendererTransform = renderer.transform;
+                Transform modelTransform = loadedCustomModel.transform;
+
+                // Preserve every renderer belonging to the custom GLB.
+                if (rendererTransform == modelTransform ||
+                    rendererTransform.IsChildOf(modelTransform))
+                    continue;
+
+                // Hide only mesh renderers, leaving other weapon effects alone.
+                if (!(renderer is MeshRenderer) &&
+                    !(renderer is SkinnedMeshRenderer))
+                    continue;
+
+                renderer.enabled = false;
+                hidden++;
+            }
+
+            Log.Info(
+                "[Weapon7 Model] Hidden vanilla mesh renderers=" +
+                hidden);
         }
 
         private bool EnsureSlot7()
