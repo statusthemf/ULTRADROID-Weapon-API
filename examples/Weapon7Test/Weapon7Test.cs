@@ -335,9 +335,9 @@ namespace ULTRADROID.Weapon7Test
                     {
                         Log.Info(
                             $"[Weapon7 ScaleTrace] {current.name}" +
-                            $" | localScale={current.localScale}" +
-                            $" | lossyScale={current.lossyScale}" +
-                            $" | localPosition={current.localPosition}"
+                            $" | localScale={current.localScale.ToString("F6")}" +
+                            $" | lossyScale={current.lossyScale.ToString("F6")}" +
+                            $" | localPosition={current.localPosition.ToString("F6")}"
                         );
 
                         current = current.parent;
