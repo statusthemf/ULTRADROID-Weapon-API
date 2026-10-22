@@ -1,0 +1,11 @@
+
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>ULTRADROID.Weapon.API</AssemblyName>
+    <RootNamespace>ULTRADROID.Weapon.API</RootNamespace>
+  </PropertyGroup>
+</Project>
