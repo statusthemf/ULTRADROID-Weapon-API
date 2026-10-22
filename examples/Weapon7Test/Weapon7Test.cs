@@ -327,6 +327,21 @@ namespace ULTRADROID.Weapon7Test
                             $" | meshBoundsSize={mesh.bounds.size}"
                         );
                     }
+
+                    Transform current = renderer.transform;
+
+                    while (current != null &&
+                           current != loadedCustomModel.transform.parent)
+                    {
+                        Log.Info(
+                            $"[Weapon7 ScaleTrace] {current.name}" +
+                            $" | localScale={current.localScale}" +
+                            $" | lossyScale={current.lossyScale}" +
+                            $" | localPosition={current.localPosition}"
+                        );
+
+                        current = current.parent;
+                    }
                 }
 
                 HideVanillaWeaponMeshes();
