@@ -253,7 +253,7 @@ namespace ULTRADROID.Weapon7Test
                     Name = "ULTRADROID_TestWeapon_Model",
                     Position = new Vector3(0f, 0f, 1f),
                     RotationEuler = Vector3.zero,
-                    Scale = new Vector3(0.5f, 0.5f, 0.5f),
+                    Scale = new Vector3(50f, 50f, 50f),
                     LoadTextures = true,
                     CreateColliders = false
                 };
