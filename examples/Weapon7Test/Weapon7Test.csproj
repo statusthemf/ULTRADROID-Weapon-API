@@ -15,6 +15,11 @@
       <Private>false</Private>
     </Reference>
 
+    <Reference Include="ULTRADROID.Models">
+      <HintPath>../../lib/ULTRADROID.Models.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
     <Reference Include="Unity.TextMeshPro">
       <HintPath>lib/Unity.TextMeshPro.dll</HintPath>
       <Private>false</Private>
