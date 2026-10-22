@@ -225,6 +225,7 @@ namespace ULTRADROID.Weapon7Test
             if (loadedCustomModel != null &&
                 loadedCustomModel.transform.parent == testWeapon.transform)
             {
+                loadedCustomModel.SetActive(true);
                 HideVanillaWeaponMeshes();
                 return;
             }
@@ -269,15 +270,53 @@ namespace ULTRADROID.Weapon7Test
                     return;
                 }
 
+                loadedCustomModel.SetActive(true);
+
+                Transform modelTransform = loadedCustomModel.transform;
+
                 Log.Info(
                     "[Weapon7 Model] GLB loaded: " +
                     loadedCustomModel.name);
+
+                Log.Info(
+                    "[Weapon7 Model] Root activeSelf=" +
+                    loadedCustomModel.activeSelf +
+                    ", activeInHierarchy=" +
+                    loadedCustomModel.activeInHierarchy);
+
+                Log.Info(
+                    "[Weapon7 Model] Parent=" +
+                    (modelTransform.parent != null
+                        ? modelTransform.parent.name
+                        : "<none>") +
+                    ", localPosition=" + modelTransform.localPosition +
+                    ", localRotation=" +
+                    modelTransform.localRotation.eulerAngles +
+                    ", localScale=" + modelTransform.localScale);
+
+                Renderer[] modelRenderers =
+                    loadedCustomModel.GetComponentsInChildren<Renderer>(true);
+
+                foreach (Renderer renderer in modelRenderers)
+                {
+                    if (renderer == null)
+                        continue;
+
+                    renderer.enabled = true;
+
+                    Log.Info(
+                        "[Weapon7 Model] Renderer=" + renderer.name +
+                        ", type=" + renderer.GetType().Name +
+                        ", enabled=" + renderer.enabled +
+                        ", active=" + renderer.gameObject.activeInHierarchy +
+                        ", bounds=" + renderer.bounds);
+                }
 
                 HideVanillaWeaponMeshes();
 
                 Log.Info(
                     "[Weapon7 Model] Custom model renderers=" +
-                    loadedCustomModel.GetComponentsInChildren<Renderer>(true).Length);
+                    modelRenderers.Length);
             }
             catch (Exception ex)
             {
