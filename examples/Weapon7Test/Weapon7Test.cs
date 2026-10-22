@@ -294,29 +294,46 @@ namespace ULTRADROID.Weapon7Test
                     modelTransform.localRotation.eulerAngles +
                     ", localScale=" + modelTransform.localScale);
 
-                Renderer[] modelRenderers =
+                Renderer[] renderers =
                     loadedCustomModel.GetComponentsInChildren<Renderer>(true);
 
-                foreach (Renderer renderer in modelRenderers)
+                foreach (Renderer renderer in renderers)
                 {
                     if (renderer == null)
                         continue;
 
                     renderer.enabled = true;
 
+                    MeshFilter meshFilter = renderer.GetComponent<MeshFilter>();
+                    Mesh mesh = meshFilter != null ? meshFilter.sharedMesh : null;
+
                     Log.Info(
-                        "[Weapon7 Model] Renderer=" + renderer.name +
-                        ", type=" + renderer.GetType().Name +
-                        ", enabled=" + renderer.enabled +
-                        ", active=" + renderer.gameObject.activeInHierarchy +
-                        ", bounds=" + renderer.bounds);
+                        $"[Weapon7 Model] Renderer={renderer.name}" +
+                        $" | enabled={renderer.enabled}" +
+                        $" | activeInHierarchy={renderer.gameObject.activeInHierarchy}" +
+                        $" | localPosition={renderer.transform.localPosition}" +
+                        $" | worldPosition={renderer.transform.position}" +
+                        $" | localScale={renderer.transform.lossyScale}" +
+                        $" | bounds={renderer.bounds}"
+                    );
+
+                    if (mesh != null)
+                    {
+                        Log.Info(
+                            $"[Weapon7 Model] Mesh={mesh.name}" +
+                            $" | vertices={mesh.vertexCount}" +
+                            $" | subMeshCount={mesh.subMeshCount}" +
+                            $" | meshBounds={mesh.bounds}" +
+                            $" | meshBoundsSize={mesh.bounds.size}"
+                        );
+                    }
                 }
 
                 HideVanillaWeaponMeshes();
 
                 Log.Info(
                     "[Weapon7 Model] Custom model renderers=" +
-                    modelRenderers.Length);
+                    renderers.Length);
             }
             catch (Exception ex)
             {
