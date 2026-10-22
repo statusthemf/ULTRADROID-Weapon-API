@@ -331,6 +331,20 @@ namespace ULTRADROID.Weapon7Test
                 Log.Info(
                     "[Weapon7FourVariants] Requested slot 7 variant " +
                     variantIndex + ".");
+
+                for (int i = 0; i < variants.Length; i++)
+                {
+                    GameObject variant = variants[i];
+
+                    Log.Info(
+                        "[Weapon7FourVariants] V" + (i + 1) +
+                        " | name=" +
+                        (variant != null ? variant.name : "NULL") +
+                        " | activeSelf=" +
+                        (variant != null && variant.activeSelf) +
+                        " | activeInHierarchy=" +
+                        (variant != null && variant.activeInHierarchy));
+                }
             }
             catch (Exception ex)
             {
