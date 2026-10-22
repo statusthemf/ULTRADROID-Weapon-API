@@ -1,77 +1,100 @@
+
 using System;
+using System.Collections.Generic;
 
 namespace ULTRADROID.Weapon.API
 {
-    public enum WeaponAttackSlot
+    public sealed class WeaponDefinition
     {
-        Primary,
-        Alternate,
-        Special
+        private readonly List<WeaponVariantDefinition> variants =
+            new List<WeaponVariantDefinition>();
+
+        public string Id { get; }
+        public string DisplayName { get; set; }
+        public string Category { get; set; }
+        public int PreferredSlot { get; set; }
+
+        public IReadOnlyList<WeaponVariantDefinition> Variants =>
+            variants.AsReadOnly();
+
+        public WeaponAttackDefinition PrimaryAttack { get; set; }
+        public WeaponAttackDefinition AlternateAttack { get; set; }
+
+        public WeaponDefinition(string id, string displayName)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+                throw new ArgumentException("Weapon ID cannot be empty.", nameof(id));
+
+            if (string.IsNullOrWhiteSpace(displayName))
+                throw new ArgumentException(
+                    "Display name cannot be empty.", nameof(displayName));
+
+            Id = id.Trim();
+            DisplayName = displayName.Trim();
+            Category = "Custom";
+            PreferredSlot = -1;
+        }
+
+        public WeaponDefinition AddVariant(WeaponVariantDefinition variant)
+        {
+            if (variant == null)
+                throw new ArgumentNullException(nameof(variant));
+
+            foreach (WeaponVariantDefinition existing in variants)
+            {
+                if (string.Equals(
+                    existing.Id, variant.Id,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        "Duplicate variant ID '" + variant.Id +
+                        "' on weapon '" + Id + "'.");
+                }
+            }
+
+            variants.Add(variant);
+            return this;
+        }
+
+        public WeaponVariantDefinition GetVariant(string variantId)
+        {
+            foreach (WeaponVariantDefinition variant in variants)
+            {
+                if (string.Equals(
+                    variant.Id, variantId,
+                    StringComparison.OrdinalIgnoreCase))
+                    return variant;
+            }
+
+            return null;
+        }
     }
 
-    public enum WeaponAttackKind
-    {
-        Custom,
-        Hitscan,
-        Projectile,
-        Melee,
-        Area
-    }
-
-    public sealed class WeaponAttackDefinition
+    public sealed class WeaponVariantDefinition
     {
         public string Id { get; }
+        public string DisplayName { get; set; }
 
-        public WeaponAttackKind Kind { get; set; }
+        // These are placeholders for model/visual asset references.
+        // The game integration will define how they are loaded and attached.
+        public object ModelAsset { get; set; }
+        public object VisualData { get; set; }
 
-        public float Damage { get; set; }
-        public float Range { get; set; }
-        public float CooldownSeconds { get; set; }
-        public float ProjectileSpeed { get; set; }
+        public WeaponAttackDefinition PrimaryAttack { get; set; }
+        public WeaponAttackDefinition AlternateAttack { get; set; }
 
-        public Action<WeaponAttackContext> Execute { get; set; }
-
-        public WeaponAttackDefinition(
-            string id,
-            WeaponAttackKind kind = WeaponAttackKind.Custom)
+        public WeaponVariantDefinition(string id, string displayName)
         {
             if (string.IsNullOrWhiteSpace(id))
                 throw new ArgumentException(
-                    "Attack ID cannot be empty.", nameof(id));
+                    "Variant ID cannot be empty.", nameof(id));
 
-            if (!Enum.IsDefined(typeof(WeaponAttackKind), kind))
-                throw new ArgumentOutOfRangeException(nameof(kind));
+            if (string.IsNullOrWhiteSpace(displayName))
+                throw new ArgumentException(
+                    "Display name cannot be empty.", nameof(displayName));
 
             Id = id.Trim();
-            Kind = kind;
-        }
-    }
-
-    public sealed class WeaponAttackContext
-    {
-        public string WeaponId { get; }
-        public string VariantId { get; }
-        public WeaponAttackSlot Slot { get; }
-
-        // The runtime adapter will supply actual game-specific objects.
-        public object Owner { get; }
-        public object NativeContext { get; }
-
-        public WeaponAttackContext(
-            string weaponId,
-            string variantId,
-            WeaponAttackSlot slot,
-            object owner = null,
-            object nativeContext = null)
-        {
-            WeaponId = weaponId ??
-                throw new ArgumentNullException(nameof(weaponId));
-
-            VariantId = variantId;
-            Slot = slot;
-            Owner = owner;
-            NativeContext = nativeContext;
+            DisplayName = displayName.Trim();
         }
     }
 }
-
