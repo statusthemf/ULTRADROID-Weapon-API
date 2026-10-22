@@ -2,9 +2,7 @@ name: Build ULTRADROID Weapon API Tests
 
 on:
 push:
-branches: [main]
 pull_request:
-branches: [main]
 workflow_dispatch:
 
 jobs:
@@ -18,14 +16,14 @@ steps:
   - name: Setup .NET
     uses: actions/setup-dotnet@v4
     with:
-      dotnet-version: 10.0.x
+      dotnet-version: '10.0.x'
 
   - name: Verify required DLL files
     shell: bash
     run: |
       set -eu
 
-      files=(
+      required=(
         "lib/ULTRADROID.API.dll"
         "lib/BepInEx.Core.dll"
         "lib/BepInEx.Unity.IL2CPP.dll"
@@ -36,7 +34,7 @@ steps:
         "lib/Unity.TextMeshPro.dll"
       )
 
-      for file in "${files[@]}"; do
+      for file in "${required[@]}"; do
         if [ ! -s "$file" ]; then
           echo "::error::Missing or empty DLL: $file"
           exit 1
@@ -45,32 +43,62 @@ steps:
       done
 
   - name: Verify Weapon 7 four-variant source
+    run: |
+      if [ ! -s "examples/Weapon7Test/Weapon7FourVariantsTest.cs" ]; then
+        echo "::error::Weapon7FourVariantsTest.cs not found."
+        exit 1
+      fi
+      echo "Four-variant source file found."
+
+  - name: Restore Weapon7Test
+    run: dotnet restore examples/Weapon7Test/Weapon7Test.csproj
+
+  - name: Build Weapon7Test with four variants
+    run: |
+      dotnet build examples/Weapon7Test/Weapon7Test.csproj \
+        --configuration Release \
+        --no-restore
+
+  - name: Build FourthVariantTest
+    run: |
+      dotnet restore examples/FourthVariantTest/FourthVariantTest.csproj
+      dotnet build examples/FourthVariantTest/FourthVariantTest.csproj \
+        --configuration Release \
+        --no-restore
+
+  - name: Verify build outputs
     shell: bash
     run: |
       set -eu
-      file="examples/Weapon7Test/Weapon7FourVariantsTest.cs"
-      if [ ! -s "$file" ]; then
-        echo "::error::Missing or empty source file: $file"
+
+      weapon7="examples/Weapon7Test/bin/Release/net10.0/ULTRADROID.Weapon7Test.dll"
+      fourth="examples/FourthVariantTest/bin/Release/net10.0/ULTRADROID.FourthVariantTest.dll"
+
+      if [ ! -s "$weapon7" ]; then
+        echo "::error::Weapon7Test output DLL not found: $weapon7"
+        find examples/Weapon7Test/bin -type f 2>/dev/null || true
         exit 1
       fi
-      echo "Found $file"
 
-  - name: Build Weapon7Test (including four-variant test)
-    run: dotnet build examples/Weapon7Test/Weapon7Test.csproj --configuration Release
+      if [ ! -s "$fourth" ]; then
+        echo "::error::FourthVariantTest output DLL not found: $fourth"
+        find examples/FourthVariantTest/bin -type f 2>/dev/null || true
+        exit 1
+      fi
 
-  - name: Build FourthVariantTest
-    run: dotnet build examples/FourthVariantTest/FourthVariantTest.csproj --configuration Release
+      echo "Build outputs verified:"
+      ls -lh "$weapon7" "$fourth"
 
   - name: Upload Weapon7Test
     uses: actions/upload-artifact@v4
     with:
       name: ULTRADROID-Weapon7Test
-      path: examples/Weapon7Test/bin/Release/**/*.dll
+      path: examples/Weapon7Test/bin/Release/net10.0/ULTRADROID.Weapon7Test.dll
       if-no-files-found: error
 
   - name: Upload FourthVariantTest
     uses: actions/upload-artifact@v4
     with:
       name: ULTRADROID-FourthVariantTest
-      path: examples/FourthVariantTest/bin/Release/**/*.dll
+      path: examples/FourthVariantTest/bin/Release/net10.0/ULTRADROID.FourthVariantTest.dll
       if-no-files-found: error
