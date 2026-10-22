@@ -37,6 +37,7 @@ namespace ULTRADROID.FourthVariantTest
         private GameObject pierceTemplate;
         private IntPtr lastGunPointer = IntPtr.Zero;
         private string lastRevolverListState = null;
+        private string lastColorDiagnostics;
 
         private int lastCheckFrame = -120;
         private bool buttonRegistered;
@@ -102,6 +103,9 @@ namespace ULTRADROID.FourthVariantTest
                 // The game may rebuild weapon lists after shop changes.
                 // Check and repair the fourth variant on every scheduled check.
                 setupComplete = EnsureFourthVariant();
+
+                if (setupComplete)
+                    LogColorDiagnostics();
             }
             catch (Exception ex)
             {
@@ -350,6 +354,101 @@ namespace ULTRADROID.FourthVariantTest
             return true;
         }
 
+        private void LogColorDiagnostics()
+        {
+            try
+            {
+                Type settingsType = Helpers.FindType("ColorBlindSettings");
+
+                if (settingsType == null)
+                {
+                    Log.LogWarning(
+                        "[FourthVariant] ColorBlindSettings type not found.");
+                    return;
+                }
+
+                object settingsObjects =
+                    UnityEngine.Object.FindObjectsOfType(
+                        Il2CppType.From(settingsType));
+
+                object settings = null;
+
+                for (int i = 0; i < Helpers.Count(settingsObjects); i++)
+                {
+                    settings = Helpers.Wrap(
+                        settingsType,
+                        Helpers.Item(settingsObjects, i));
+
+                    if (settings != null)
+                        break;
+                }
+
+                if (settings == null)
+                {
+                    Log.LogInfo(
+                        "[FourthVariant] ColorBlindSettings instance not found yet.");
+                    return;
+                }
+
+                object colors = Helpers.GetMember(
+                    settings, "variationColors");
+
+                Type iconType = Helpers.FindType("WeaponIcon");
+                string iconInfo = "WeaponIcon type not found";
+
+                if (iconType != null && goldRevolver != null)
+                {
+                    object icons = Helpers.Invoke(
+                        goldRevolver,
+                        "GetComponentsInChildren",
+                        Il2CppType.From(iconType),
+                        true);
+
+                    if (Helpers.Count(icons) > 0)
+                    {
+                        object icon = Helpers.Wrap(
+                            iconType,
+                            Helpers.Item(icons, 0));
+
+                        object descriptor = Helpers.GetMember(
+                            icon, "weaponDescriptor");
+
+                        object variant = Helpers.GetMember(
+                            descriptor, "variationColor");
+
+                        object renderers = Helpers.GetMember(
+                            icon, "variationColoredRenderers");
+
+                        object images = Helpers.GetMember(
+                            icon, "variationColoredImages");
+
+                        iconInfo =
+                            "DescriptorVariant=" + variant +
+                            " | RendererEntries=" + Helpers.Count(renderers) +
+                            " | ImageEntries=" + Helpers.Count(images);
+                    }
+                }
+
+                string state =
+                    "ColorArrayLength=" + Helpers.Count(colors) +
+                    " | " + iconInfo;
+
+                if (state != lastColorDiagnostics)
+                {
+                    lastColorDiagnostics = state;
+
+                    Log.LogInfo(
+                        "[FourthVariant] Color diagnostics: " + state);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.LogError(
+                    "[FourthVariant] Color diagnostics failed: " +
+                    Helpers.Unwrap(ex));
+            }
+        }
+
         private void SelectGoldRevolver()
         {
             try
@@ -539,9 +638,31 @@ namespace ULTRADROID.FourthVariantTest
 
             object count = GetMember(collection, "Count");
 
-            return count == null
-                ? 0
-                : Convert.ToInt32(count);
+            if (count != null)
+            {
+                try
+                {
+                    return Convert.ToInt32(count);
+                }
+                catch
+                {
+                }
+            }
+
+            object length = GetMember(collection, "Length");
+
+            if (length != null)
+            {
+                try
+                {
+                    return Convert.ToInt32(length);
+                }
+                catch
+                {
+                }
+            }
+
+            return 0;
         }
 
         internal static object Item(object collection, int index)
