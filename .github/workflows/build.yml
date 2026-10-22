@@ -1,65 +1,76 @@
 name: Build ULTRADROID Weapon API Tests
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
+push:
+branches: [main]
+pull_request:
+branches: [main]
+workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+build:
+runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
+  - name: Setup .NET
+    uses: actions/setup-dotnet@v4
+    with:
+      dotnet-version: 10.0.x
 
-      - name: Verify required DLL files
-        shell: bash
-        run: |
-          set -eu
+  - name: Verify required DLL files
+    shell: bash
+    run: |
+      set -eu
 
-          files=(
-            "lib/ULTRADROID.API.dll"
-            "lib/BepInEx.Core.dll"
-            "lib/BepInEx.Unity.IL2CPP.dll"
-            "lib/Il2CppInterop.Runtime.dll"
-            "lib/Il2Cppmscorlib.dll"
-            "lib/Assembly-CSharp.dll"
-            "lib/UnityEngine.CoreModule.dll"
-            "lib/Unity.TextMeshPro.dll"
-          )
+      files=(
+        "lib/ULTRADROID.API.dll"
+        "lib/BepInEx.Core.dll"
+        "lib/BepInEx.Unity.IL2CPP.dll"
+        "lib/Il2CppInterop.Runtime.dll"
+        "lib/Il2Cppmscorlib.dll"
+        "lib/Assembly-CSharp.dll"
+        "lib/UnityEngine.CoreModule.dll"
+        "lib/Unity.TextMeshPro.dll"
+      )
 
-          for file in "${files[@]}"; do
-            if [ ! -s "$file" ]; then
-              echo "::error::Missing or empty DLL: $file"
-              exit 1
-            fi
-            echo "Found $file"
-          done
+      for file in "${files[@]}"; do
+        if [ ! -s "$file" ]; then
+          echo "::error::Missing or empty DLL: $file"
+          exit 1
+        fi
+        echo "Found $file"
+      done
 
-      - name: Build Weapon7Test
-        run: dotnet build examples/Weapon7Test/Weapon7Test.csproj --configuration Release
+  - name: Verify Weapon 7 four-variant source
+    shell: bash
+    run: |
+      set -eu
+      file="examples/Weapon7Test/Weapon7FourVariantsTest.cs"
+      if [ ! -s "$file" ]; then
+        echo "::error::Missing or empty source file: $file"
+        exit 1
+      fi
+      echo "Found $file"
 
-      - name: Build FourthVariantTest
-        run: dotnet build examples/FourthVariantTest/FourthVariantTest.csproj --configuration Release
+  - name: Build Weapon7Test (including four-variant test)
+    run: dotnet build examples/Weapon7Test/Weapon7Test.csproj --configuration Release
 
-      - name: Upload Weapon7Test
-        uses: actions/upload-artifact@v4
-        with:
-          name: ULTRADROID-Weapon7Test
-          path: examples/Weapon7Test/bin/Release/**/*.dll
-          if-no-files-found: error
+  - name: Build FourthVariantTest
+    run: dotnet build examples/FourthVariantTest/FourthVariantTest.csproj --configuration Release
 
-      - name: Upload FourthVariantTest
-        uses: actions/upload-artifact@v4
-        with:
-          name: ULTRADROID-FourthVariantTest
-          path: examples/FourthVariantTest/bin/Release/**/*.dll
-          if-no-files-found: error
+  - name: Upload Weapon7Test
+    uses: actions/upload-artifact@v4
+    with:
+      name: ULTRADROID-Weapon7Test
+      path: examples/Weapon7Test/bin/Release/**/*.dll
+      if-no-files-found: error
+
+  - name: Upload FourthVariantTest
+    uses: actions/upload-artifact@v4
+    with:
+      name: ULTRADROID-FourthVariantTest
+      path: examples/FourthVariantTest/bin/Release/**/*.dll
+      if-no-files-found: error
