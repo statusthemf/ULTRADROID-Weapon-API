@@ -62,6 +62,8 @@ namespace ULTRADROID.WeaponApiExample
                     Color = WeaponVariantColor.Blue,
                     CustomTint = new Color(0.10f, 0.35f, 1.0f),
                     IconTint = new Color(0.10f, 0.35f, 1.0f),
+                    WheelTintEnabled = true,
+                    WheelTint = new Color(0.10f, 0.35f, 1.0f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "blue_chain_slash", WeaponAttackKind.Melee)
                     {
@@ -111,6 +113,8 @@ namespace ULTRADROID.WeaponApiExample
                     Color = WeaponVariantColor.Green,
                     CustomTint = new Color(0.10f, 1.0f, 0.20f),
                     IconTint = new Color(0.10f, 1.0f, 0.20f),
+                    WheelTintEnabled = true,
+                    WheelTint = new Color(0.10f, 1.0f, 0.20f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "green_chain_slash", WeaponAttackKind.Melee)
                     {
@@ -160,6 +164,8 @@ namespace ULTRADROID.WeaponApiExample
                     Color = WeaponVariantColor.Red,
                     CustomTint = new Color(1.0f, 0.08f, 0.08f),
                     IconTint = new Color(1.0f, 0.08f, 0.08f),
+                    WheelTintEnabled = true,
+                    WheelTint = new Color(1.0f, 0.08f, 0.08f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "red_chain_slash", WeaponAttackKind.Melee)
                     {
@@ -209,6 +215,8 @@ namespace ULTRADROID.WeaponApiExample
                     Color = WeaponVariantColor.Default,
                     CustomTint = new Color(0.025f, 0.025f, 0.035f),
                     IconTint = new Color(0.025f, 0.025f, 0.035f),
+                    WheelTintEnabled = true,
+                    WheelTint = new Color(0.025f, 0.025f, 0.035f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "black_chain_slash", WeaponAttackKind.Melee)
                     {
@@ -274,6 +282,8 @@ namespace ULTRADROID.WeaponApiExample
                     Color = WeaponVariantColor.Default,
                     CustomTint = new Color(1.0f, 0.15f, 0.55f),
                     IconTint = new Color(1.0f, 0.15f, 0.55f),
+                    WheelTintEnabled = true,
+                    WheelTint = new Color(1.0f, 0.15f, 0.55f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "pink_primary", WeaponAttackKind.Projectile)
                     {
@@ -323,6 +333,8 @@ namespace ULTRADROID.WeaponApiExample
                     Color = WeaponVariantColor.Default,
                     CustomTint = new Color(0.55f, 0.12f, 0.95f),
                     IconTint = new Color(0.55f, 0.12f, 0.95f),
+                    WheelTintEnabled = true,
+                    WheelTint = new Color(0.55f, 0.12f, 0.95f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "purple_primary", WeaponAttackKind.Projectile)
                     {
@@ -372,6 +384,8 @@ namespace ULTRADROID.WeaponApiExample
                     Color = WeaponVariantColor.Default,
                     CustomTint = new Color(1.0f, 1.0f, 1.0f),
                     IconTint = new Color(1.0f, 1.0f, 1.0f),
+                    WheelTintEnabled = true,
+                    WheelTint = new Color(1.0f, 1.0f, 1.0f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "white_primary", WeaponAttackKind.Projectile)
                     {
@@ -421,6 +435,8 @@ namespace ULTRADROID.WeaponApiExample
                     Color = WeaponVariantColor.Default,
                     CustomTint = new Color(0.025f, 0.025f, 0.035f),
                     IconTint = new Color(0.025f, 0.025f, 0.035f),
+                    WheelTintEnabled = true,
+                    WheelTint = new Color(0.025f, 0.025f, 0.035f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "black_gun_primary", WeaponAttackKind.Projectile)
                     {
@@ -487,6 +503,8 @@ namespace ULTRADROID.WeaponApiExample
                     Color = WeaponVariantColor.Gold,
                     CustomTint = new Color(1.0f, 0.62f, 0.08f),
                     IconTint = new Color(1.0f, 0.62f, 0.08f),
+                    WheelTintEnabled = true,
+                    WheelTint = new Color(1.0f, 0.62f, 0.08f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "gold_revolver_primary", WeaponAttackKind.Projectile)
                     {
