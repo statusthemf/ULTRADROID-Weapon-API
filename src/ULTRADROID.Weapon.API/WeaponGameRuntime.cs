@@ -112,10 +112,13 @@ namespace ULTRADROID.Weapon.API
 
             try
             {
-                object found = FindReadyGunControl();
+                object found = FindReadyGunControl(Log);
 
                 if (found == null)
                 {
+                    if (IsInitialized)
+                        Log("GunControl disappeared; runtime is waiting for it again.");
+
                     IsInitialized = false;
                     GunControlInstance = null;
                     gunControl = null;
@@ -559,30 +562,78 @@ namespace ULTRADROID.Weapon.API
             return null;
         }
 
-        private static object FindReadyGunControl()
+        private static object FindReadyGunControl(Action<string> report)
         {
             Type type = FindType("GunControl");
 
             if (type == null)
-                return null;
-
-            object found = UnityEngine.Object.FindObjectsOfType(
-                Il2CppType.From(type));
-
-            for (int i = 0; i < Count(found); i++)
             {
-                object candidate =
-                    WrapInstance(type, Item(found, i));
+                report("DIAGNOSTIC: Could not find the GunControl type.");
+                return null;
+            }
+
+            report("DIAGNOSTIC: Found GunControl type: " +
+                type.FullName + " in " + type.Assembly.GetName().Name);
+
+            object found;
+
+            try
+            {
+                found = UnityEngine.Object.FindObjectsOfType(
+                    Il2CppType.From(type));
+            }
+            catch (Exception ex)
+            {
+                report("DIAGNOSTIC: FindObjectsOfType failed: " +
+                    Unwrap(ex));
+                return null;
+            }
+
+            int total = Count(found);
+
+            report("DIAGNOSTIC: GunControl instances found: " + total);
+
+            for (int i = 0; i < total; i++)
+            {
+                object candidate;
+
+                try
+                {
+                    candidate = WrapInstance(type, Item(found, i));
+                }
+                catch (Exception ex)
+                {
+                    report("DIAGNOSTIC: Could not wrap candidate " + i +
+                        ": " + Unwrap(ex));
+                    continue;
+                }
 
                 if (candidate == null)
+                {
+                    report("DIAGNOSTIC: Candidate " + i +
+                        " could not be wrapped.");
                     continue;
+                }
 
                 object slots = GetMember(candidate, "slots");
 
-                if (slots != null && Count(slots) >= 6)
+                if (slots == null)
+                {
+                    report("DIAGNOSTIC: Candidate " + i +
+                        " has no readable slots member.");
+                    continue;
+                }
+
+                int slotCount = Count(slots);
+
+                report("DIAGNOSTIC: Candidate " + i +
+                    " has " + slotCount + " slots.");
+
+                if (slotCount >= 6)
                     return candidate;
             }
 
+            report("DIAGNOSTIC: No candidate passed the readiness check.");
             return null;
         }
 
