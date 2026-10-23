@@ -39,6 +39,7 @@ namespace ULTRADROID.Weapon.API
 
         private object gunControl;
         private IntPtr gunControlPointer = IntPtr.Zero;
+        private bool definitionsRegisteredForGunControl;
         private int lastScanFrame = -120;
         private int lastWheelTintFrame = -3;
         private string lastDiscoveryMessage;
@@ -271,6 +272,7 @@ namespace ULTRADROID.Weapon.API
                     GunControlInstance = null;
                     gunControl = null;
                     gunControlPointer = IntPtr.Zero;
+                    definitionsRegisteredForGunControl = false;
 
                     ClearRegistrations();
                     return;
@@ -292,6 +294,7 @@ namespace ULTRADROID.Weapon.API
                     IsInitialized = true;
 
                     ClearRegistrations();
+                    definitionsRegisteredForGunControl = false;
 
                     Log("Connected to initialized GunControl.");
                 }
@@ -302,7 +305,11 @@ namespace ULTRADROID.Weapon.API
                     IsInitialized = true;
                 }
 
-                RegisterDefinitions();
+                if (!definitionsRegisteredForGunControl)
+                {
+                    RegisterDefinitions();
+                    definitionsRegisteredForGunControl = true;
+                }
             }
             catch (Exception ex)
             {
@@ -461,7 +468,7 @@ namespace ULTRADROID.Weapon.API
                 variantIndices[definition.Id] = indices;
                 try { Invoke(gunControl, "CalculateSlotCount"); }
                 catch (Exception ex) { Log("CalculateSlotCount warning after native extension: " + Unwrap(ex)); }
-                Log("Extended existing native family in slot " + slotNumber + " for '" + definition.DisplayName + "'.");
+                // Registration may be retried; avoid logging on every retry.
             }
             catch (Exception ex)
             {
@@ -1212,8 +1219,7 @@ namespace ULTRADROID.Weapon.API
                         if (image != null && SetMember(image, "color", tint)) changed++;
                     }
                 }
-                if (changed == 0)
-                    DebugLog("IconTint found no writable variationColoredImages on '" + weapon.name + "'. Descriptor icon tint may require a separate UI image reference.");
+                // Do not spam logs when the cloned weapon has no variation-colored images.
             }
             catch (Exception ex)
             {
