@@ -1018,42 +1018,46 @@ namespace ULTRADROID.Weapon.API
 
     public sealed class WeaponGameRuntimeBehaviour : MonoBehaviour
     {
-        private int diagnosticFrames;
-
         public WeaponGameRuntimeBehaviour(IntPtr ptr) : base(ptr) { }
 
         public void Awake()
         {
             WeaponGameRuntime.DebugLog(
-                "DIAGNOSTIC: Behaviour Awake fired.");
+                "LIFECYCLE TEST: Awake");
         }
 
         public void OnEnable()
         {
             WeaponGameRuntime.DebugLog(
-                "DIAGNOSTIC: Behaviour OnEnable fired.");
+                "LIFECYCLE TEST: OnEnable");
         }
 
         public void Start()
         {
             WeaponGameRuntime.DebugLog(
-                "DIAGNOSTIC: Behaviour Start fired.");
+                "LIFECYCLE TEST: Start");
         }
 
         public void Update()
         {
-            diagnosticFrames++;
-
-            if (diagnosticFrames == 1 ||
-                diagnosticFrames % 120 == 0)
+            if (Time.frameCount % 120 == 0)
             {
                 WeaponGameRuntime.DebugLog(
-                    "DIAGNOSTIC: Update fired; count = " +
-                    diagnosticFrames +
-                    ", Unity frame = " + Time.frameCount);
+                    "LIFECYCLE TEST: Update; frame=" +
+                    Time.frameCount);
             }
+        }
 
-            WeaponGameRuntime.Tick();
+        public void OnDisable()
+        {
+            WeaponGameRuntime.DebugLog(
+                "LIFECYCLE TEST: OnDisable");
+        }
+
+        public void OnDestroy()
+        {
+            WeaponGameRuntime.DebugLog(
+                "LIFECYCLE TEST: OnDestroy");
         }
     }
 }
