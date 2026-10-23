@@ -990,9 +990,26 @@ namespace ULTRADROID.Weapon.API
     {
         public WeaponGameRuntimeBehaviour(IntPtr ptr) : base(ptr) { }
 
+        public void Awake()
+        {
+            WeaponGameRuntime.DebugLog(
+                "DIAGNOSTIC: Behaviour Awake fired.");
+        }
+
+        public void OnEnable()
+        {
+            WeaponGameRuntime.DebugLog(
+                "DIAGNOSTIC: Behaviour OnEnable fired.");
+        }
+
+        public void Start()
+        {
+            WeaponGameRuntime.DebugLog(
+                "DIAGNOSTIC: Behaviour Start fired.");
+        }
+
         public void Update()
         {
-            WeaponGameRuntime.DebugLog("DIAGNOSTIC: Behaviour Update is running.");
             WeaponGameRuntime.Tick();
         }
     }
