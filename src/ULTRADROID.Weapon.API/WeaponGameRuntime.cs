@@ -64,6 +64,11 @@ namespace ULTRADROID.Weapon.API
             current?.UpdateRuntime();
         }
 
+        internal static void DebugLog(string message)
+        {
+            current?.Log(message);
+        }
+
         public bool TryGetWeapon(
             string weaponId,
             out WeaponDefinition definition)
@@ -987,6 +992,7 @@ namespace ULTRADROID.Weapon.API
 
         public void Update()
         {
+            WeaponGameRuntime.DebugLog("DIAGNOSTIC: Behaviour Update is running.");
             WeaponGameRuntime.Tick();
         }
     }
