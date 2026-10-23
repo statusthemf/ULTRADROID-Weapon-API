@@ -268,15 +268,46 @@ namespace ULTRADROID.Weapon.API
             out GameObject createdWeapon)
         {
             createdWeapon = null;
+            GameObject preparedWeapon = null;
 
             try
             {
-                if (targetSlot < 7)
+                if (slots == null || definition == null || targetSlot < 7)
                     return false;
 
-                // Slot number 7 corresponds to list index 6.
+                // Find a vanilla template before modifying the slot list.
+                GameObject template = FindTemplateWeapon(slots);
+
+                if (template == null)
+                {
+                    Log("No vanilla template found for '" +
+                        definition.Id + "'.");
+                    return false;
+                }
+
+                preparedWeapon = UnityEngine.Object.Instantiate(
+                    template, template.transform.parent);
+
+                if (preparedWeapon == null)
+                    return false;
+
+                preparedWeapon.name =
+                    "ULTRADROID_WEAPON_" + SafeName(definition.Id);
+
+                preparedWeapon.SetActive(false);
+
+                if (!AssignDescriptor(
+                    preparedWeapon, definition.DisplayName))
+                {
+                    Log("Could not assign WeaponDescriptor to '" +
+                        definition.Id + "'.");
+                    return false;
+                }
+
+                // Slot numbers are one-based; list indexes are zero-based.
                 int targetIndex = targetSlot - 1;
 
+                // Create missing slots only after preparing the weapon.
                 while (Count(slots) <= targetIndex)
                 {
                     object newSlot = CreateEmptySlot(slots);
@@ -306,38 +337,10 @@ namespace ULTRADROID.Weapon.API
                     return false;
                 }
 
-                GameObject template = FindTemplateWeapon(slots);
+                Add(targetSlotObject, preparedWeapon);
 
-                if (template == null)
-                {
-                    Log("No vanilla template found for '" +
-                        definition.Id + "'.");
-                    return false;
-                }
-
-                createdWeapon = UnityEngine.Object.Instantiate(
-                    template, template.transform.parent);
-
-                if (createdWeapon == null)
-                    return false;
-
-                createdWeapon.name =
-                    "ULTRADROID_WEAPON_" + SafeName(definition.Id);
-
-                createdWeapon.SetActive(false);
-
-                if (!AssignDescriptor(
-                    createdWeapon, definition.DisplayName))
-                {
-                    UnityEngine.Object.Destroy(createdWeapon);
-                    createdWeapon = null;
-
-                    Log("Could not assign WeaponDescriptor to '" +
-                        definition.Id + "'.");
-                    return false;
-                }
-
-                Add(targetSlotObject, createdWeapon);
+                createdWeapon = preparedWeapon;
+                preparedWeapon = null;
 
                 try
                 {
@@ -352,15 +355,17 @@ namespace ULTRADROID.Weapon.API
             }
             catch (Exception ex)
             {
-                if (createdWeapon != null)
-                    UnityEngine.Object.Destroy(createdWeapon);
-
-                createdWeapon = null;
-
                 Log("Native registration failed for '" +
-                    definition.Id + "': " + Unwrap(ex));
+                    (definition == null ? "<null>" : definition.Id) +
+                    "': " + Unwrap(ex));
 
                 return false;
+            }
+            finally
+            {
+                // Destroy a prepared clone if it was never successfully inserted.
+                if (preparedWeapon != null)
+                    UnityEngine.Object.Destroy(preparedWeapon);
             }
         }
 
@@ -573,12 +578,9 @@ namespace ULTRADROID.Weapon.API
 
             if (type == null)
             {
-                report("DIAGNOSTIC: Could not find the GunControl type.");
+                report("Waiting: GunControl type is unavailable.");
                 return null;
             }
-
-            report("DIAGNOSTIC: Found GunControl type: " +
-                type.FullName + " in " + type.Assembly.GetName().Name);
 
             object found;
 
@@ -589,14 +591,11 @@ namespace ULTRADROID.Weapon.API
             }
             catch (Exception ex)
             {
-                report("DIAGNOSTIC: FindObjectsOfType failed: " +
-                    Unwrap(ex));
+                report("GunControl search failed: " + Unwrap(ex));
                 return null;
             }
 
             int total = Count(found);
-
-            report("DIAGNOSTIC: GunControl instances found: " + total);
 
             for (int i = 0; i < total; i++)
             {
@@ -608,38 +607,69 @@ namespace ULTRADROID.Weapon.API
                 }
                 catch (Exception ex)
                 {
-                    report("DIAGNOSTIC: Could not wrap candidate " + i +
-                        ": " + Unwrap(ex));
+                    report("Could not wrap GunControl candidate: " +
+                        Unwrap(ex));
                     continue;
                 }
 
                 if (candidate == null)
-                {
-                    report("DIAGNOSTIC: Candidate " + i +
-                        " could not be wrapped.");
                     continue;
-                }
 
                 object slots = GetMember(candidate, "slots");
 
-                if (slots == null)
-                {
-                    report("DIAGNOSTIC: Candidate " + i +
-                        " has no readable slots member.");
+                if (slots == null || Count(slots) < 6)
                     continue;
-                }
 
-                int slotCount = Count(slots);
+                if (!HasPopulatedVanillaSlots(slots))
+                    continue;
 
-                report("DIAGNOSTIC: Candidate " + i +
-                    " has " + slotCount + " slots.");
+                if (GetPointer(candidate) == IntPtr.Zero)
+                    continue;
 
-                if (slotCount >= 6)
-                    return candidate;
+                report("Gameplay weapon system is ready.");
+                return candidate;
             }
 
-            report("DIAGNOSTIC: No candidate passed the readiness check.");
             return null;
+        }
+
+        private static bool HasPopulatedVanillaSlots(object slots)
+        {
+            if (slots == null || Count(slots) < 6)
+                return false;
+
+            for (int i = 0; i < 6; i++)
+            {
+                object slot = Item(slots, i);
+
+                if (slot == null || Count(slot) == 0)
+                    return false;
+
+                bool foundVanillaWeapon = false;
+
+                for (int j = 0; j < Count(slot); j++)
+                {
+                    GameObject weapon = Item(slot, j) as GameObject;
+
+                    if (weapon == null)
+                        continue;
+
+                    if (weapon.name.StartsWith(
+                        "ULTRADROID_WEAPON_",
+                        StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    foundVanillaWeapon = true;
+                    break;
+                }
+
+                if (!foundVanillaWeapon)
+                    return false;
+            }
+
+            return true;
         }
 
         private static Type FindType(string name)
