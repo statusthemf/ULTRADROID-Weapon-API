@@ -304,6 +304,14 @@ namespace ULTRADROID.Weapon.API
             object slots,
             WeaponDefinition definition)
         {
+            if (definition.ExtendExistingSlot >= 1 &&
+                definition.ExtendExistingSlot <= 6)
+            {
+                RegisterExistingFamilyExtension(
+                    slots, definition, definition.ExtendExistingSlot);
+                return;
+            }
+
             GameObject baseWeapon = FindExistingWeapon(
                 slots, definition.Id, out int existingSlot);
 
@@ -363,6 +371,75 @@ namespace ULTRADROID.Weapon.API
                 definition,
                 targetSlot,
                 baseWeapon);
+        }
+
+        private void RegisterExistingFamilyExtension(
+            object slots, WeaponDefinition definition, int slotNumber)
+        {
+            try
+            {
+                object family = Item(slots, slotNumber - 1);
+                if (family == null || Count(family) == 0)
+                {
+                    Log("Cannot extend native slot " + slotNumber + ": family is empty.");
+                    return;
+                }
+
+                var indices = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                GameObject template = Item(family, 0) as GameObject;
+                if (template == null)
+                {
+                    Log("Cannot extend native slot " + slotNumber + ": no GameObject template.");
+                    return;
+                }
+
+                foreach (WeaponVariantDefinition variant in definition.Variants)
+                {
+                    if (variant == null || string.IsNullOrWhiteSpace(variant.Id))
+                        continue;
+
+                    string entryName = VariantWeaponName(definition.Id, variant.Id);
+                    GameObject entry = FindInFamily(family, entryName, out int familyIndex);
+                    if (entry == null)
+                    {
+                        GameObject clone = UnityEngine.Object.Instantiate(template, template.transform.parent);
+                        if (clone == null) continue;
+                        clone.name = entryName;
+                        clone.SetActive(false);
+                        if (!AssignDescriptor(clone, variant.DisplayName, variant.Color))
+                        {
+                            UnityEngine.Object.Destroy(clone);
+                            Log("Could not assign descriptor for native-family variant '" + variant.Id + "'.");
+                            continue;
+                        }
+                        Add(family, clone);
+                        entry = clone;
+                        familyIndex = FindFamilyIndex(family, entry);
+                        Log("Appended variant '" + definition.Id + "/" + variant.Id + "' to existing native slot " + slotNumber + ".");
+                    }
+                    else
+                    {
+                        AssignDescriptor(entry, variant.DisplayName, variant.Color);
+                        familyIndex = FindFamilyIndex(family, entry);
+                    }
+
+                    Color? modelTint = variant.ModelTint ?? variant.CustomTint;
+                    if (modelTint.HasValue) ApplyCustomTint(entry, modelTint.Value);
+                    if (variant.IconTint.HasValue) ApplyIconTint(entry, variant.IconTint.Value);
+                    if (familyIndex >= 0) indices[variant.Id] = familyIndex;
+                    nativeWeapons[definition.Id] = entry;
+                }
+
+                weaponSlots[definition.Id] = slotNumber;
+                variantIndices[definition.Id] = indices;
+                try { Invoke(gunControl, "CalculateSlotCount"); }
+                catch (Exception ex) { Log("CalculateSlotCount warning after native extension: " + Unwrap(ex)); }
+                Log("Extended existing native family in slot " + slotNumber + " for '" + definition.DisplayName + "'.");
+            }
+            catch (Exception ex)
+            {
+                Log("Native family extension failed for '" + definition.Id + "': " + Unwrap(ex));
+            }
         }
 
         private int ResolveTargetSlot(
@@ -608,9 +685,13 @@ namespace ULTRADROID.Weapon.API
                         variant.Id + "'.");
                 }
 
-                if (entry != null && variant.CustomTint.HasValue)
+                if (entry != null)
                 {
-                    ApplyCustomTint(entry, variant.CustomTint.Value);
+                    Color? modelTint = variant.ModelTint ?? variant.CustomTint;
+                    if (modelTint.HasValue)
+                        ApplyCustomTint(entry, modelTint.Value);
+                    if (variant.IconTint.HasValue)
+                        ApplyIconTint(entry, variant.IconTint.Value);
                 }
 
                 if (entry == null || familyIndex < 0)
@@ -899,6 +980,34 @@ namespace ULTRADROID.Weapon.API
             catch (Exception ex)
             {
                 DebugLog("Custom tint failed for '" + weapon.name + "': " + Unwrap(ex));
+            }
+        }
+
+        private static void ApplyIconTint(GameObject weapon, Color tint)
+        {
+            if (weapon == null) return;
+            try
+            {
+                Type iconType = FindType("WeaponIcon");
+                if (iconType == null) return;
+                object components = Invoke(weapon, "GetComponentsInChildren", Il2CppType.From(iconType), true);
+                int changed = 0;
+                for (int i = 0; i < Count(components); i++)
+                {
+                    object icon = WrapInstance(iconType, Item(components, i));
+                    object images = GetMember(icon, "variationColoredImages");
+                    for (int j = 0; j < Count(images); j++)
+                    {
+                        object image = Item(images, j);
+                        if (image != null && SetMember(image, "color", tint)) changed++;
+                    }
+                }
+                if (changed == 0)
+                    DebugLog("IconTint found no writable variationColoredImages on '" + weapon.name + "'. Descriptor icon tint may require a separate UI image reference.");
+            }
+            catch (Exception ex)
+            {
+                DebugLog("Icon tint failed for '" + weapon.name + "': " + Unwrap(ex));
             }
         }
 
