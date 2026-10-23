@@ -125,7 +125,10 @@ namespace ULTRADROID.WeaponApiExample
                 blades.AlternateAttack = standard.AlternateAttack;
 
                 WeaponRegistry.Register(blades);
-                AddComponent<WeaponGameRuntime>();
+                var weaponRuntime = new WeaponGameRuntime(
+                    message => Log.LogInfo(message));
+
+                weaponRuntime.TryInitialize();
 
                 if (WeaponRegistry.TryGet(
                     "chaos_blades",
