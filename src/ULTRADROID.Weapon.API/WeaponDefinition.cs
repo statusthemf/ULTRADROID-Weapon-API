@@ -31,6 +31,10 @@ namespace ULTRADROID.Weapon.API
         public string Category { get; set; }
         public int PreferredSlot { get; set; }
 
+        // Optional existing native family slot to extend (1-6).
+        // Leave -1 for a normal custom weapon in slot 7 or higher.
+        public int ExtendExistingSlot { get; set; } = -1;
+
         public IReadOnlyList<WeaponVariantDefinition> Variants =>
             variants.AsReadOnly();
 
@@ -162,12 +166,21 @@ namespace ULTRADROID.Weapon.API
         public string Id { get; }
         public string DisplayName { get; set; }
 
-        // Native game color. Use Default when CustomTint is the intended color.
+        // Native game color. Use Default when using custom tints.
         public WeaponVariantColor Color { get; set; } = WeaponVariantColor.Default;
 
-        // Optional custom material tint, separate from the native enum.
-        // Requires the runtime integration to apply the tint to supported materials.
-        public Color? CustomTint { get; set; }
+        // Optional tint for the weapon model/materials, independent of native color.
+        public Color? ModelTint { get; set; }
+
+        // Backwards-compatible alias for ModelTint.
+        public Color? CustomTint
+        {
+            get => ModelTint;
+            set => ModelTint = value;
+        }
+
+        // Optional tint for the HUD/descriptor icon, independent of ModelTint.
+        public Color? IconTint { get; set; }
 
         // Placeholders for model/visual asset references. The game integration
         // defines how these are loaded and attached.
