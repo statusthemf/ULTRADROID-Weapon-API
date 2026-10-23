@@ -20,10 +20,17 @@ namespace ULTRADROID.Weapon.API
                 StringComparer.OrdinalIgnoreCase);
 
         private readonly Dictionary<string, int> weaponSlots =
-            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            new Dictionary<string, int>(
+                StringComparer.OrdinalIgnoreCase);
 
         private readonly Dictionary<int, string> slotOwners =
             new Dictionary<int, string>();
+
+        // Maps each weapon ID to its variant ID -> native family index.
+        private readonly Dictionary<string, Dictionary<string, int>>
+            variantIndices =
+                new Dictionary<string, Dictionary<string, int>>(
+                    StringComparer.OrdinalIgnoreCase);
 
         private object gunControl;
         private IntPtr gunControlPointer = IntPtr.Zero;
@@ -55,23 +62,17 @@ namespace ULTRADROID.Weapon.API
                 if (attachBehaviour == null)
                     throw new ArgumentNullException(nameof(attachBehaviour));
 
-                ClassInjector.RegisterTypeInIl2Cpp<WeaponGameRuntimeBehaviour>();
+                ClassInjector.RegisterTypeInIl2Cpp<
+                    WeaponGameRuntimeBehaviour>();
 
-                // Let BepInEx attach the injected behaviour.
                 attachBehaviour();
 
-                current.Log(
-                    "Runtime behaviour attached through BepInEx."
-                );
-
-                current.Log(
-                    "Runtime started; waiting for GunControl."
-                );
+                current.Log("Runtime behaviour attached through BepInEx.");
+                current.Log("Runtime started; waiting for GunControl.");
             }
             catch (Exception ex)
             {
                 current.Log("Runtime startup failed: " + ex);
-
                 current = null;
             }
         }
@@ -98,31 +99,106 @@ namespace ULTRADROID.Weapon.API
             if (current == null ||
                 !current.IsInitialized ||
                 string.IsNullOrWhiteSpace(weaponId))
-            {
                 return false;
-            }
 
             if (!current.weaponSlots.TryGetValue(
                 weaponId, out int slotNumber))
             {
-                current.Log("Weapon has no registered slot: " + weaponId);
+                current.Log(
+                    "Weapon has no registered slot: " + weaponId);
                 return false;
             }
 
             try
             {
-                Invoke(current.gunControl, "SwitchWeapon", slotNumber, false);
+                Invoke(
+                    current.gunControl,
+                    "SwitchWeapon",
+                    slotNumber,
+                    false);
 
-                current.Log("Selected '" + weaponId +
+                current.Log(
+                    "Selected '" + weaponId +
                     "' using slot " + slotNumber + ".");
 
                 return true;
             }
             catch (Exception ex)
             {
-                current.Log("Weapon selection failed: " + Unwrap(ex));
+                current.Log(
+                    "Weapon selection failed: " + Unwrap(ex));
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Selects a registered custom variant by ID.
+        /// The index is resolved from the actual native family list.
+        /// </summary>
+        public static bool SelectVariant(
+            string weaponId,
+            string variantId)
+        {
+            if (current == null ||
+                !current.IsInitialized ||
+                string.IsNullOrWhiteSpace(weaponId) ||
+                string.IsNullOrWhiteSpace(variantId))
+                return false;
+
+            if (!current.weaponSlots.TryGetValue(
+                weaponId, out int slotNumber))
+            {
+                current.Log(
+                    "Variant selection failed: unknown weapon '" +
+                    weaponId + "'.");
+                return false;
+            }
+
+            if (!current.variantIndices.TryGetValue(
+                weaponId, out Dictionary<string, int> variants) ||
+                !variants.TryGetValue(
+                    variantId, out int variantIndex))
+            {
+                current.Log(
+                    "Variant is not registered: " +
+                    weaponId + "/" + variantId);
+                return false;
+            }
+
+            try
+            {
+                Invoke(
+                    current.gunControl,
+                    "SwitchWeapon",
+                    slotNumber,
+                    false);
+
+                Invoke(
+                    current.gunControl,
+                    "SwitchVariant",
+                    variantIndex);
+
+                current.Log(
+                    "Selected variant '" + variantId +
+                    "' of '" + weaponId +
+                    "' at family index " + variantIndex + ".");
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                current.Log(
+                    "Variant selection failed: " + Unwrap(ex));
+                return false;
+            }
+        }
+
+        private void ClearRegistrations()
+        {
+            nativeWeapons.Clear();
+            weaponSlots.Clear();
+            slotOwners.Clear();
+            variantIndices.Clear();
         }
 
         private void UpdateRuntime()
@@ -139,17 +215,17 @@ namespace ULTRADROID.Weapon.API
                 if (found == null)
                 {
                     if (IsInitialized)
-                        Log("GunControl disappeared; runtime is waiting for it again.");
+                    {
+                        Log(
+                            "GunControl disappeared; waiting for it again.");
+                    }
 
                     IsInitialized = false;
                     GunControlInstance = null;
                     gunControl = null;
                     gunControlPointer = IntPtr.Zero;
 
-                    nativeWeapons.Clear();
-                    weaponSlots.Clear();
-                    slotOwners.Clear();
-
+                    ClearRegistrations();
                     return;
                 }
 
@@ -165,9 +241,7 @@ namespace ULTRADROID.Weapon.API
                     GunControlInstance = found;
                     IsInitialized = true;
 
-                    nativeWeapons.Clear();
-                    weaponSlots.Clear();
-                    slotOwners.Clear();
+                    ClearRegistrations();
 
                     Log("Connected to initialized GunControl.");
                 }
@@ -199,57 +273,73 @@ namespace ULTRADROID.Weapon.API
                     string.IsNullOrWhiteSpace(definition.Id))
                     continue;
 
-                if (nativeWeapons.ContainsKey(definition.Id))
-                    continue;
+                RegisterDefinition(slots, definition);
+            }
+        }
 
-                GameObject existing = FindExistingWeapon(
-                    slots, definition.Id, out int existingSlot);
+        private void RegisterDefinition(
+            object slots,
+            WeaponDefinition definition)
+        {
+            GameObject baseWeapon = FindExistingWeapon(
+                slots, definition.Id, out int existingSlot);
 
-                if (existing != null)
-                {
-                    nativeWeapons[definition.Id] = existing;
-                    weaponSlots[definition.Id] = existingSlot;
-                    slotOwners[existingSlot] = definition.Id;
+            int targetSlot;
 
-                    Log("Found existing weapon '" + definition.Id +
-                        "' in slot " + existingSlot + ".");
-
-                    continue;
-                }
-
-                int targetSlot = ResolveTargetSlot(definition, slots);
+            if (baseWeapon != null)
+            {
+                targetSlot = existingSlot;
+            }
+            else
+            {
+                targetSlot = ResolveTargetSlot(definition, slots);
 
                 if (targetSlot < 7)
                 {
-                    Log("Invalid custom slot " + targetSlot +
-                        " for weapon '" + definition.Id + "'.");
-                    continue;
+                    Log(
+                        "Invalid custom slot for '" +
+                        definition.Id + "'.");
+                    return;
                 }
 
-                if (slotOwners.TryGetValue(targetSlot, out string owner) &&
+                if (slotOwners.TryGetValue(
+                    targetSlot, out string owner) &&
                     !string.Equals(
-                        owner, definition.Id,
+                        owner,
+                        definition.Id,
                         StringComparison.OrdinalIgnoreCase))
                 {
-                    Log("Slot " + targetSlot + " is already assigned to '" +
-                        owner + "'. Cannot register '" + definition.Id + "'.");
-                    continue;
+                    Log(
+                        "Slot " + targetSlot +
+                        " is already assigned to '" + owner +
+                        "'. Cannot register '" + definition.Id + "'.");
+                    return;
                 }
 
-                if (!TryRegisterDefinition(
-                    slots, definition, targetSlot,
-                    out GameObject created))
-                {
-                    continue;
-                }
+                if (!TryCreateBaseWeapon(
+                    slots,
+                    definition,
+                    targetSlot,
+                    out baseWeapon))
+                    return;
 
-                nativeWeapons[definition.Id] = created;
-                weaponSlots[definition.Id] = targetSlot;
-                slotOwners[targetSlot] = definition.Id;
-
-                Log("Registered '" + definition.DisplayName +
+                Log(
+                    "Registered '" + definition.DisplayName +
                     "' in native slot " + targetSlot + ".");
             }
+
+            if (baseWeapon == null)
+                return;
+
+            weaponSlots[definition.Id] = targetSlot;
+            nativeWeapons[definition.Id] = baseWeapon;
+            slotOwners[targetSlot] = definition.Id;
+
+            RegisterVariants(
+                slots,
+                definition,
+                targetSlot,
+                baseWeapon);
         }
 
         private int ResolveTargetSlot(
@@ -263,13 +353,14 @@ namespace ULTRADROID.Weapon.API
 
             if (requested != -1)
             {
-                Log("PreferredSlot must be -1 (automatic) or at least 7. " +
-                    "Weapon: " + definition.Id);
+                Log(
+                    "PreferredSlot must be -1 or at least 7. Weapon: " +
+                    definition.Id);
                 return -1;
             }
 
-            // Keep the first six vanilla slots unchanged.
-            // Existing custom slots are already represented in the slot list.
+            // Native slot numbers are one-based.
+            // Preserve the first six vanilla slots.
             int candidate = Math.Max(7, Count(slots) + 1);
 
             while (slotOwners.ContainsKey(candidate))
@@ -278,60 +369,76 @@ namespace ULTRADROID.Weapon.API
             return candidate;
         }
 
-        private bool TryRegisterDefinition(
+        private bool TryCreateBaseWeapon(
             object slots,
             WeaponDefinition definition,
             int targetSlot,
             out GameObject createdWeapon)
         {
             createdWeapon = null;
-            GameObject preparedWeapon = null;
+            GameObject prepared = null;
 
             try
             {
-                if (slots == null || definition == null || targetSlot < 7)
+                if (slots == null ||
+                    definition == null ||
+                    targetSlot < 7)
                     return false;
 
-                // Find a vanilla template before modifying the slot list.
                 GameObject template = FindTemplateWeapon(slots);
 
                 if (template == null)
                 {
-                    Log("No vanilla template found for '" +
+                    Log(
+                        "No vanilla template found for '" +
                         definition.Id + "'.");
                     return false;
                 }
 
-                preparedWeapon = UnityEngine.Object.Instantiate(
-                    template, template.transform.parent);
+                prepared = UnityEngine.Object.Instantiate(
+                    template,
+                    template.transform.parent);
 
-                if (preparedWeapon == null)
+                if (prepared == null)
                     return false;
 
-                preparedWeapon.name =
-                    "ULTRADROID_WEAPON_" + SafeName(definition.Id);
+                prepared.name =
+                    BaseWeaponName(definition.Id);
 
-                preparedWeapon.SetActive(false);
+                prepared.SetActive(false);
 
-                if (!AssignDescriptor(
-                    preparedWeapon, definition.DisplayName))
+                string displayName = definition.DisplayName;
+
+                if (definition.Variants.Count > 0)
                 {
-                    Log("Could not assign WeaponDescriptor to '" +
+                    WeaponVariantDefinition first =
+                        definition.Variants[0];
+
+                    if (first != null &&
+                        !string.IsNullOrWhiteSpace(first.DisplayName))
+                    {
+                        displayName = first.DisplayName;
+                    }
+                }
+
+                if (!AssignDescriptor(prepared, displayName))
+                {
+                    Log(
+                        "Could not assign WeaponDescriptor to '" +
                         definition.Id + "'.");
                     return false;
                 }
 
-                // Slot numbers are one-based; list indexes are zero-based.
                 int targetIndex = targetSlot - 1;
 
-                // Create missing slots only after preparing the weapon.
                 while (Count(slots) <= targetIndex)
                 {
                     object newSlot = CreateEmptySlot(slots);
 
                     if (newSlot == null)
                     {
-                        Log("Could not create native slot " +
+                        Log(
+                            "Could not create native slot " +
                             (Count(slots) + 1) + ".");
                         return false;
                     }
@@ -339,25 +446,24 @@ namespace ULTRADROID.Weapon.API
                     Add(slots, newSlot);
                 }
 
-                object targetSlotObject = Item(slots, targetIndex);
+                object target = Item(slots, targetIndex);
 
-                if (targetSlotObject == null)
-                {
-                    Log("Native slot " + targetSlot + " is unavailable.");
+                if (target == null)
                     return false;
-                }
 
-                if (Count(targetSlotObject) > 0)
+                // Never overwrite another weapon family.
+                if (Count(target) > 0)
                 {
-                    Log("Native slot " + targetSlot +
+                    Log(
+                        "Native slot " + targetSlot +
                         " is not empty. Refusing to overwrite it.");
                     return false;
                 }
 
-                Add(targetSlotObject, preparedWeapon);
+                Add(target, prepared);
 
-                createdWeapon = preparedWeapon;
-                preparedWeapon = null;
+                createdWeapon = prepared;
+                prepared = null;
 
                 try
                 {
@@ -365,25 +471,248 @@ namespace ULTRADROID.Weapon.API
                 }
                 catch (Exception ex)
                 {
-                    Log("CalculateSlotCount warning: " + Unwrap(ex));
+                    Log(
+                        "CalculateSlotCount warning: " +
+                        Unwrap(ex));
                 }
 
                 return true;
             }
             catch (Exception ex)
             {
-                Log("Native registration failed for '" +
-                    (definition == null ? "<null>" : definition.Id) +
-                    "': " + Unwrap(ex));
-
+                Log(
+                    "Native registration failed for '" +
+                    definition.Id + "': " + Unwrap(ex));
                 return false;
             }
             finally
             {
-                // Destroy a prepared clone if it was never successfully inserted.
-                if (preparedWeapon != null)
-                    UnityEngine.Object.Destroy(preparedWeapon);
+                if (prepared != null)
+                    UnityEngine.Object.Destroy(prepared);
             }
+        }
+
+        private void RegisterVariants(
+            object slots,
+            WeaponDefinition definition,
+            int slotNumber,
+            GameObject baseWeapon)
+        {
+            object family = Item(slots, slotNumber - 1);
+
+            if (family == null)
+                return;
+
+            if (!variantIndices.TryGetValue(
+                definition.Id,
+                out Dictionary<string, int> indices))
+            {
+                indices = new Dictionary<string, int>(
+                    StringComparer.OrdinalIgnoreCase);
+
+                variantIndices[definition.Id] = indices;
+            }
+
+            if (definition.Variants == null ||
+                definition.Variants.Count == 0)
+            {
+                return;
+            }
+
+            // The first declared variant uses the base entry.
+            // Additional variants receive independent native entries.
+            for (int i = 0; i < definition.Variants.Count; i++)
+            {
+                WeaponVariantDefinition variant =
+                    definition.Variants[i];
+
+                if (variant == null ||
+                    string.IsNullOrWhiteSpace(variant.Id))
+                    continue;
+
+                string entryName = i == 0
+                    ? BaseWeaponName(definition.Id)
+                    : VariantWeaponName(
+                        definition.Id, variant.Id);
+
+                GameObject entry = FindInFamily(
+                    family, entryName, out int familyIndex);
+
+                if (entry == null && i == 0)
+                {
+                    // The base entry already exists, but might have been
+                    // created before variant registration was implemented.
+                    entry = baseWeapon;
+                    familyIndex = FindFamilyIndex(family, entry);
+                }
+
+                if (entry == null && i > 0)
+                {
+                    if (!TryCreateVariantEntry(
+                        family,
+                        baseWeapon,
+                        definition,
+                        variant,
+                        out entry))
+                    {
+                        continue;
+                    }
+
+                    familyIndex = FindFamilyIndex(family, entry);
+                }
+                else if (entry != null &&
+                         !AssignDescriptor(entry, variant.DisplayName))
+                {
+                    Log(
+                        "Warning: descriptor update failed for variant '" +
+                        variant.Id + "'.");
+                }
+
+                if (entry == null || familyIndex < 0)
+                {
+                    Log(
+                        "Could not resolve native index for variant '" +
+                        definition.Id + "/" + variant.Id + "'.");
+                    continue;
+                }
+
+                indices[variant.Id] = familyIndex;
+
+                Log(
+                    "Variant '" + definition.Id + "/" + variant.Id +
+                    "' maps to native family index " + familyIndex + ".");
+            }
+        }
+
+        private bool TryCreateVariantEntry(
+            object family,
+            GameObject baseWeapon,
+            WeaponDefinition definition,
+            WeaponVariantDefinition variant,
+            out GameObject created)
+        {
+            created = null;
+            GameObject prepared = null;
+
+            try
+            {
+                prepared = UnityEngine.Object.Instantiate(
+                    baseWeapon,
+                    baseWeapon.transform.parent);
+
+                if (prepared == null)
+                    return false;
+
+                prepared.name = VariantWeaponName(
+                    definition.Id, variant.Id);
+
+                prepared.SetActive(false);
+
+                if (!AssignDescriptor(
+                    prepared, variant.DisplayName))
+                {
+                    Log(
+                        "Could not assign descriptor to variant '" +
+                        variant.Id + "'.");
+                    return false;
+                }
+
+                Add(family, prepared);
+
+                created = prepared;
+                prepared = null;
+
+                try
+                {
+                    Invoke(gunControl, "CalculateSlotCount");
+                }
+                catch (Exception ex)
+                {
+                    Log(
+                        "CalculateSlotCount warning: " +
+                        Unwrap(ex));
+                }
+
+                Log(
+                    "Created native entry for variant '" +
+                    definition.Id + "/" + variant.Id + "'.");
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log(
+                    "Variant creation failed for '" +
+                    definition.Id + "/" + variant.Id +
+                    "': " + Unwrap(ex));
+                return false;
+            }
+            finally
+            {
+                if (prepared != null)
+                    UnityEngine.Object.Destroy(prepared);
+            }
+        }
+
+        private static string BaseWeaponName(string id)
+        {
+            return "ULTRADROID_WEAPON_" + SafeName(id);
+        }
+
+        private static string VariantWeaponName(
+            string weaponId,
+            string variantId)
+        {
+            return "ULTRADROID_VARIANT_" +
+                SafeName(weaponId) + "_" + SafeName(variantId);
+        }
+
+        private static GameObject FindInFamily(
+            object family,
+            string expectedName,
+            out int index)
+        {
+            index = -1;
+
+            for (int i = 0; i < Count(family); i++)
+            {
+                GameObject item = Item(family, i) as GameObject;
+
+                if (item != null &&
+                    string.Equals(
+                        item.name,
+                        expectedName,
+                        StringComparison.Ordinal))
+                {
+                    index = i;
+                    return item;
+                }
+            }
+
+            return null;
+        }
+
+        private static int FindFamilyIndex(
+            object family,
+            GameObject target)
+        {
+            if (target == null)
+                return -1;
+
+            for (int i = 0; i < Count(family); i++)
+            {
+                GameObject item = Item(family, i) as GameObject;
+
+                if (item == target)
+                    return i;
+
+                if (item != null &&
+                    target != null &&
+                    item.GetInstanceID() == target.GetInstanceID())
+                    return i;
+            }
+
+            return -1;
         }
 
         private static object CreateEmptySlot(object slots)
@@ -416,6 +745,9 @@ namespace ULTRADROID.Weapon.API
                     if (weapon != null &&
                         !weapon.name.StartsWith(
                             "ULTRADROID_WEAPON_",
+                            StringComparison.Ordinal) &&
+                        !weapon.name.StartsWith(
+                            "ULTRADROID_VARIANT_",
                             StringComparison.Ordinal))
                     {
                         return weapon;
@@ -432,19 +764,22 @@ namespace ULTRADROID.Weapon.API
             out int slotNumber)
         {
             slotNumber = -1;
-
-            string expected =
-                "ULTRADROID_WEAPON_" + SafeName(id);
+            string expected = BaseWeaponName(id);
 
             for (int i = 6; i < Count(slots); i++)
             {
-                object slot = Item(slots, i);
+                object family = Item(slots, i);
 
-                for (int j = 0; j < Count(slot); j++)
+                for (int j = 0; j < Count(family); j++)
                 {
-                    GameObject weapon = Item(slot, j) as GameObject;
+                    GameObject weapon =
+                        Item(family, j) as GameObject;
 
-                    if (weapon != null && weapon.name == expected)
+                    if (weapon != null &&
+                        string.Equals(
+                            weapon.name,
+                            expected,
+                            StringComparison.Ordinal))
                     {
                         slotNumber = i + 1;
                         return weapon;
@@ -456,31 +791,45 @@ namespace ULTRADROID.Weapon.API
         }
 
         private static bool AssignDescriptor(
-            GameObject weapon, string displayName)
+            GameObject weapon,
+            string displayName)
         {
+            if (weapon == null ||
+                string.IsNullOrWhiteSpace(displayName))
+                return false;
+
             Type iconType = FindType("WeaponIcon");
             Type descriptorType = FindType("WeaponDescriptor");
 
             if (iconType == null || descriptorType == null)
                 return false;
 
-            object components = Invoke(
-                weapon,
-                "GetComponentsInChildren",
-                Il2CppType.From(iconType),
-                true);
+            object components;
+
+            try
+            {
+                components = Invoke(
+                    weapon,
+                    "GetComponentsInChildren",
+                    Il2CppType.From(iconType),
+                    true);
+            }
+            catch
+            {
+                return false;
+            }
 
             if (Count(components) == 0)
                 return false;
 
-            object firstIcon =
-                WrapInstance(iconType, Item(components, 0));
+            object firstIcon = WrapInstance(
+                iconType, Item(components, 0));
 
             if (firstIcon == null)
                 return false;
 
-            object original =
-                GetMember(firstIcon, "weaponDescriptor");
+            object original = GetMember(
+                firstIcon, "weaponDescriptor");
 
             object descriptor = CreateDescriptor(descriptorType);
 
@@ -490,7 +839,8 @@ namespace ULTRADROID.Weapon.API
             if (original != null)
             {
                 SetMember(
-                    descriptor, "icon", GetMember(original, "icon"));
+                    descriptor, "icon",
+                    GetMember(original, "icon"));
 
                 SetMember(
                     descriptor, "glowIcon",
@@ -505,11 +855,12 @@ namespace ULTRADROID.Weapon.API
 
             for (int i = 0; i < Count(components); i++)
             {
-                object icon =
-                    WrapInstance(iconType, Item(components, i));
+                object icon = WrapInstance(
+                    iconType, Item(components, i));
 
                 if (icon != null &&
-                    SetMember(icon, "weaponDescriptor", descriptor))
+                    SetMember(
+                        icon, "weaponDescriptor", descriptor))
                 {
                     assigned++;
                 }
@@ -520,10 +871,11 @@ namespace ULTRADROID.Weapon.API
 
         private static object CreateDescriptor(Type descriptorType)
         {
-            foreach (MethodInfo method in typeof(ScriptableObject).GetMethods(
-                BindingFlags.Public |
-                BindingFlags.NonPublic |
-                BindingFlags.Static))
+            foreach (MethodInfo method in
+                typeof(ScriptableObject).GetMethods(
+                    BindingFlags.Public |
+                    BindingFlags.NonPublic |
+                    BindingFlags.Static))
             {
                 if (method.Name != "CreateInstance" ||
                     !method.IsGenericMethodDefinition ||
@@ -551,10 +903,11 @@ namespace ULTRADROID.Weapon.API
             }
             catch { }
 
-            foreach (MethodInfo method in typeof(ScriptableObject).GetMethods(
-                BindingFlags.Public |
-                BindingFlags.NonPublic |
-                BindingFlags.Static))
+            foreach (MethodInfo method in
+                typeof(ScriptableObject).GetMethods(
+                    BindingFlags.Public |
+                    BindingFlags.NonPublic |
+                    BindingFlags.Static))
             {
                 if (method.Name != "CreateInstance" ||
                     method.IsGenericMethod ||
@@ -589,7 +942,8 @@ namespace ULTRADROID.Weapon.API
             return null;
         }
 
-        private static object FindReadyGunControl(Action<string> report)
+        private static object FindReadyGunControl(
+            Action<string> report)
         {
             Type type = FindType("GunControl");
 
@@ -608,23 +962,24 @@ namespace ULTRADROID.Weapon.API
             }
             catch (Exception ex)
             {
-                report("GunControl search failed: " + Unwrap(ex));
+                report(
+                    "GunControl search failed: " + Unwrap(ex));
                 return null;
             }
 
-            int total = Count(found);
-
-            for (int i = 0; i < total; i++)
+            for (int i = 0; i < Count(found); i++)
             {
                 object candidate;
 
                 try
                 {
-                    candidate = WrapInstance(type, Item(found, i));
+                    candidate = WrapInstance(
+                        type, Item(found, i));
                 }
                 catch (Exception ex)
                 {
-                    report("Could not wrap GunControl candidate: " +
+                    report(
+                        "Could not wrap GunControl candidate: " +
                         Unwrap(ex));
                     continue;
                 }
@@ -634,13 +989,10 @@ namespace ULTRADROID.Weapon.API
 
                 object slots = GetMember(candidate, "slots");
 
-                if (slots == null || Count(slots) < 6)
-                    continue;
-
-                if (!HasPopulatedVanillaSlots(slots))
-                    continue;
-
-                if (GetPointer(candidate) == IntPtr.Zero)
+                if (slots == null ||
+                    Count(slots) < 6 ||
+                    !HasPopulatedVanillaSlots(slots) ||
+                    GetPointer(candidate) == IntPtr.Zero)
                     continue;
 
                 report("Gameplay weapon system is ready.");
@@ -657,32 +1009,34 @@ namespace ULTRADROID.Weapon.API
 
             for (int i = 0; i < 6; i++)
             {
-                object slot = Item(slots, i);
+                object family = Item(slots, i);
 
-                if (slot == null || Count(slot) == 0)
+                if (family == null || Count(family) == 0)
                     return false;
 
-                bool foundVanillaWeapon = false;
+                bool foundVanilla = false;
 
-                for (int j = 0; j < Count(slot); j++)
+                for (int j = 0; j < Count(family); j++)
                 {
-                    GameObject weapon = Item(slot, j) as GameObject;
+                    GameObject weapon =
+                        Item(family, j) as GameObject;
 
                     if (weapon == null)
                         continue;
 
                     if (weapon.name.StartsWith(
-                        "ULTRADROID_WEAPON_",
-                        StringComparison.Ordinal))
-                    {
+                            "ULTRADROID_WEAPON_",
+                            StringComparison.Ordinal) ||
+                        weapon.name.StartsWith(
+                            "ULTRADROID_VARIANT_",
+                            StringComparison.Ordinal))
                         continue;
-                    }
 
-                    foundVanillaWeapon = true;
+                    foundVanilla = true;
                     break;
                 }
 
-                if (!foundVanillaWeapon)
+                if (!foundVanilla)
                     return false;
             }
 
@@ -761,7 +1115,9 @@ namespace ULTRADROID.Weapon.API
                 : native.Pointer;
         }
 
-        private static object GetMember(object instance, string name)
+        private static object GetMember(
+            object instance,
+            string name)
         {
             if (instance == null)
                 return null;
@@ -801,7 +1157,9 @@ namespace ULTRADROID.Weapon.API
         }
 
         private static bool SetMember(
-            object instance, string name, object value)
+            object instance,
+            string name,
+            object value)
         {
             if (instance == null)
                 return false;
@@ -843,7 +1201,8 @@ namespace ULTRADROID.Weapon.API
                     {
                         try
                         {
-                            property.SetValue(instance, value, null);
+                            property.SetValue(
+                                instance, value, null);
                             return true;
                         }
                         catch { }
@@ -864,18 +1223,24 @@ namespace ULTRADROID.Weapon.API
 
             object count = GetMember(collection, "Count");
 
-            return count == null ? 0 : Convert.ToInt32(count);
+            return count == null
+                ? 0
+                : Convert.ToInt32(count);
         }
 
-        private static object Item(object collection, int index)
+        private static object Item(
+            object collection,
+            int index)
         {
             if (collection == null || index < 0)
                 return null;
 
             if (collection is Array array)
+            {
                 return index < array.Length
                     ? array.GetValue(index)
                     : null;
+            }
 
             try
             {
@@ -893,14 +1258,16 @@ namespace ULTRADROID.Weapon.API
 
             try
             {
-                foreach (MethodInfo method in collection.GetType().GetMethods(
-                    BindingFlags.Instance |
-                    BindingFlags.Public |
-                    BindingFlags.NonPublic))
+                foreach (MethodInfo method in
+                    collection.GetType().GetMethods(
+                        BindingFlags.Instance |
+                        BindingFlags.Public |
+                        BindingFlags.NonPublic))
                 {
                     if (method.Name == "get_Item" &&
                         method.GetParameters().Length == 1 &&
-                        method.GetParameters()[0].ParameterType == typeof(int))
+                        method.GetParameters()[0].ParameterType ==
+                            typeof(int))
                     {
                         return method.Invoke(
                             collection, new object[] { index });
@@ -912,12 +1279,18 @@ namespace ULTRADROID.Weapon.API
             return null;
         }
 
-        private static void Add(object collection, object value)
+        private static void Add(
+            object collection,
+            object value)
         {
-            foreach (MethodInfo method in collection.GetType().GetMethods(
-                BindingFlags.Instance |
-                BindingFlags.Public |
-                BindingFlags.NonPublic))
+            if (collection == null)
+                throw new ArgumentNullException(nameof(collection));
+
+            foreach (MethodInfo method in
+                collection.GetType().GetMethods(
+                    BindingFlags.Instance |
+                    BindingFlags.Public |
+                    BindingFlags.NonPublic))
             {
                 if (method.Name != "Add")
                     continue;
@@ -941,7 +1314,9 @@ namespace ULTRADROID.Weapon.API
         }
 
         private static object Invoke(
-            object instance, string name, params object[] arguments)
+            object instance,
+            string name,
+            params object[] arguments)
         {
             if (instance == null)
                 throw new ArgumentNullException(nameof(instance));
@@ -950,11 +1325,12 @@ namespace ULTRADROID.Weapon.API
                 type != null;
                 type = type.BaseType)
             {
-                foreach (MethodInfo method in type.GetMethods(
-                    BindingFlags.Instance |
-                    BindingFlags.Public |
-                    BindingFlags.NonPublic |
-                    BindingFlags.DeclaredOnly))
+                foreach (MethodInfo method in
+                    type.GetMethods(
+                        BindingFlags.Instance |
+                        BindingFlags.Public |
+                        BindingFlags.NonPublic |
+                        BindingFlags.DeclaredOnly))
                 {
                     if (method.Name != name)
                         continue;
@@ -975,6 +1351,7 @@ namespace ULTRADROID.Weapon.API
                                     parameters[i].ParameterType) == null)
                             {
                                 matches = false;
+                                break;
                             }
                         }
                         else if (!parameters[i].ParameterType.IsAssignableFrom(
@@ -1005,8 +1382,11 @@ namespace ULTRADROID.Weapon.API
 
             for (int i = 0; i < chars.Length; i++)
             {
-                if (!char.IsLetterOrDigit(chars[i]) && chars[i] != '_')
+                if (!char.IsLetterOrDigit(chars[i]) &&
+                    chars[i] != '_')
+                {
                     chars[i] = '_';
+                }
             }
 
             return new string(chars);
@@ -1044,23 +1424,17 @@ namespace ULTRADROID.Weapon.API
 
         public void Awake()
         {
-            WeaponGameRuntime.DebugLog(
-                "LIFECYCLE: Awake fired."
-            );
+            WeaponGameRuntime.DebugLog("LIFECYCLE: Awake fired.");
         }
 
         public void OnEnable()
         {
-            WeaponGameRuntime.DebugLog(
-                "LIFECYCLE: OnEnable fired."
-            );
+            WeaponGameRuntime.DebugLog("LIFECYCLE: OnEnable fired.");
         }
 
         public void Start()
         {
-            WeaponGameRuntime.DebugLog(
-                "LIFECYCLE: Start fired."
-            );
+            WeaponGameRuntime.DebugLog("LIFECYCLE: Start fired.");
         }
 
         public void Update()
@@ -1071,16 +1445,14 @@ namespace ULTRADROID.Weapon.API
 
                 WeaponGameRuntime.DebugLog(
                     "LIFECYCLE: Update fired; frame=" +
-                    Time.frameCount
-                );
+                    Time.frameCount);
             }
 
             if (Time.frameCount % 300 == 0)
             {
                 WeaponGameRuntime.DebugLog(
                     "Runtime heartbeat; frame=" +
-                    Time.frameCount
-                );
+                    Time.frameCount);
             }
 
             WeaponGameRuntime.Tick();
