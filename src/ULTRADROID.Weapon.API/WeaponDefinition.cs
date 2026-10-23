@@ -171,6 +171,10 @@ namespace ULTRADROID.Weapon.API
 
         // Optional tint for the weapon model/materials, independent of native color.
         public Color? ModelTint { get; set; }
+        
+        // Optional weapon-wheel tint. Disabled by default.
+        public bool WheelTintEnabled { get; set; } = false;
+        public Color? WheelTint { get; set; }
 
         // Backwards-compatible alias for ModelTint.
         public Color? CustomTint
