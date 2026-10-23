@@ -45,7 +45,6 @@ namespace ULTRADROID.Weapon.API
             current = new WeaponGameRuntime(logger);
 
             ClassInjector.RegisterTypeInIl2Cpp<WeaponGameRuntimeBehaviour>();
-            componentRegistered = true;
 
             GameObject host =
                 new GameObject("ULTRADROID_Weapon_API_Runtime");
