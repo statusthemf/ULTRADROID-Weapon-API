@@ -1,4 +1,3 @@
-
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -12,6 +11,12 @@ namespace ULTRADROID.Weapon.API
     public sealed class WeaponGameRuntime
     {
         private static WeaponGameRuntime current;
+
+        // Type lookup is expensive because it may enumerate every loaded assembly.
+        // Cache successful lookups; do not cache misses because game assemblies may
+        // not be ready the first time the runtime starts.
+        private static readonly Dictionary<string, Type> typeCache =
+            new Dictionary<string, Type>(StringComparer.Ordinal);
 
         private readonly Action<string> log;
 
@@ -35,6 +40,7 @@ namespace ULTRADROID.Weapon.API
         private object gunControl;
         private IntPtr gunControlPointer = IntPtr.Zero;
         private int lastScanFrame = -120;
+        private string lastDiscoveryMessage;
 
         public bool IsInitialized { get; private set; }
 
@@ -62,8 +68,7 @@ namespace ULTRADROID.Weapon.API
                 if (attachBehaviour == null)
                     throw new ArgumentNullException(nameof(attachBehaviour));
 
-                ClassInjector.RegisterTypeInIl2Cpp<
-                    WeaponGameRuntimeBehaviour>();
+                ClassInjector.RegisterTypeInIl2Cpp<WeaponGameRuntimeBehaviour>();
 
                 attachBehaviour();
 
@@ -201,6 +206,21 @@ namespace ULTRADROID.Weapon.API
             variantIndices.Clear();
         }
 
+        private void LogDiscoveryOnce(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return;
+
+            if (string.Equals(
+                lastDiscoveryMessage,
+                message,
+                StringComparison.Ordinal))
+                return;
+
+            lastDiscoveryMessage = message;
+            Log(message);
+        }
+
         private void UpdateRuntime()
         {
             if (Time.frameCount - lastScanFrame < 60)
@@ -210,7 +230,7 @@ namespace ULTRADROID.Weapon.API
 
             try
             {
-                object found = FindReadyGunControl(Log);
+                object found = FindReadyGunControl(LogDiscoveryOnce);
 
                 if (found == null)
                 {
@@ -228,6 +248,9 @@ namespace ULTRADROID.Weapon.API
                     ClearRegistrations();
                     return;
                 }
+
+                // A successful discovery ends any previous repeated-warning state.
+                lastDiscoveryMessage = null;
 
                 IntPtr pointer = GetPointer(found);
 
@@ -359,8 +382,7 @@ namespace ULTRADROID.Weapon.API
                 return -1;
             }
 
-            // Native slot numbers are one-based.
-            // Preserve the first six vanilla slots.
+            // Native slot numbers are one-based. Preserve vanilla slots 1–6.
             int candidate = Math.Max(7, Count(slots) + 1);
 
             while (slotOwners.ContainsKey(candidate))
@@ -402,9 +424,7 @@ namespace ULTRADROID.Weapon.API
                 if (prepared == null)
                     return false;
 
-                prepared.name =
-                    BaseWeaponName(definition.Id);
-
+                prepared.name = BaseWeaponName(definition.Id);
                 prepared.SetActive(false);
 
                 string displayName = definition.DisplayName;
@@ -501,7 +521,10 @@ namespace ULTRADROID.Weapon.API
             object family = Item(slots, slotNumber - 1);
 
             if (family == null)
+            {
+                variantIndices.Remove(definition.Id);
                 return;
+            }
 
             if (!variantIndices.TryGetValue(
                 definition.Id,
@@ -513,9 +536,20 @@ namespace ULTRADROID.Weapon.API
                 variantIndices[definition.Id] = indices;
             }
 
+            // Keep the previous map only to identify real index changes. Rebuild
+            // the live map each scan so removed/failed variants cannot leave stale
+            // IDs pointing at the wrong native entry.
+            Dictionary<string, int> previousIndices =
+                new Dictionary<string, int>(
+                    indices,
+                    StringComparer.OrdinalIgnoreCase);
+
+            indices.Clear();
+
             if (definition.Variants == null ||
                 definition.Variants.Count == 0)
             {
+                variantIndices.Remove(definition.Id);
                 return;
             }
 
@@ -540,8 +574,7 @@ namespace ULTRADROID.Weapon.API
 
                 if (entry == null && i == 0)
                 {
-                    // The base entry already exists, but might have been
-                    // created before variant registration was implemented.
+                    // The base entry may have been created before variant support.
                     entry = baseWeapon;
                     familyIndex = FindFamilyIndex(family, entry);
                 }
@@ -578,9 +611,24 @@ namespace ULTRADROID.Weapon.API
 
                 indices[variant.Id] = familyIndex;
 
-                Log(
-                    "Variant '" + definition.Id + "/" + variant.Id +
-                    "' maps to native family index " + familyIndex + ".");
+                if (!previousIndices.TryGetValue(
+                    variant.Id, out int previousIndex) ||
+                    previousIndex != familyIndex)
+                {
+                    Log(
+                        "Variant '" + definition.Id + "/" + variant.Id +
+                        "' maps to native family index " + familyIndex + ".");
+                }
+            }
+
+            foreach (KeyValuePair<string, int> previous in previousIndices)
+            {
+                if (!indices.ContainsKey(previous.Key))
+                {
+                    Log(
+                        "Variant mapping is no longer available: " +
+                        definition.Id + "/" + previous.Key + ".");
+                }
             }
         }
 
@@ -707,7 +755,6 @@ namespace ULTRADROID.Weapon.API
                     return i;
 
                 if (item != null &&
-                    target != null &&
                     item.GetInstanceID() == target.GetInstanceID())
                     return i;
             }
@@ -819,8 +866,45 @@ namespace ULTRADROID.Weapon.API
                 return false;
             }
 
-            if (Count(components) == 0)
+            int componentCount = Count(components);
+
+            if (componentCount == 0)
                 return false;
+
+            // Do not allocate a new ScriptableObject on every scan. If every
+            // WeaponIcon already has the desired descriptor name, no write is
+            // required. If a child is missing/mismatched, repair all icons below.
+            bool descriptorsAlreadyMatch = true;
+
+            for (int i = 0; i < componentCount; i++)
+            {
+                object icon = WrapInstance(
+                    iconType, Item(components, i));
+
+                if (icon == null)
+                {
+                    descriptorsAlreadyMatch = false;
+                    break;
+                }
+
+                object existingDescriptor = GetMember(
+                    icon, "weaponDescriptor");
+
+                object existingName = GetMember(
+                    existingDescriptor, "weaponName");
+
+                if (!string.Equals(
+                    Convert.ToString(existingName),
+                    displayName,
+                    StringComparison.Ordinal))
+                {
+                    descriptorsAlreadyMatch = false;
+                    break;
+                }
+            }
+
+            if (descriptorsAlreadyMatch)
+                return true;
 
             object firstIcon = WrapInstance(
                 iconType, Item(components, 0));
@@ -853,7 +937,7 @@ namespace ULTRADROID.Weapon.API
 
             int assigned = 0;
 
-            for (int i = 0; i < Count(components); i++)
+            for (int i = 0; i < componentCount; i++)
             {
                 object icon = WrapInstance(
                     iconType, Item(components, i));
@@ -949,7 +1033,8 @@ namespace ULTRADROID.Weapon.API
 
             if (type == null)
             {
-                report("Waiting: GunControl type is unavailable.");
+                report?.Invoke(
+                    "Waiting: GunControl type is unavailable.");
                 return null;
             }
 
@@ -962,7 +1047,7 @@ namespace ULTRADROID.Weapon.API
             }
             catch (Exception ex)
             {
-                report(
+                report?.Invoke(
                     "GunControl search failed: " + Unwrap(ex));
                 return null;
             }
@@ -978,7 +1063,7 @@ namespace ULTRADROID.Weapon.API
                 }
                 catch (Exception ex)
                 {
-                    report(
+                    report?.Invoke(
                         "Could not wrap GunControl candidate: " +
                         Unwrap(ex));
                     continue;
@@ -995,7 +1080,8 @@ namespace ULTRADROID.Weapon.API
                     GetPointer(candidate) == IntPtr.Zero)
                     continue;
 
-                report("Gameplay weapon system is ready.");
+                // Don't log readiness here: this function is polled repeatedly.
+                // UpdateRuntime logs only when the instance pointer changes.
                 return candidate;
             }
 
@@ -1045,6 +1131,13 @@ namespace ULTRADROID.Weapon.API
 
         private static Type FindType(string name)
         {
+            if (string.IsNullOrWhiteSpace(name))
+                return null;
+
+            if (typeCache.TryGetValue(name, out Type cached) &&
+                cached != null)
+                return cached;
+
             foreach (Assembly assembly in
                 AppDomain.CurrentDomain.GetAssemblies())
             {
@@ -1053,13 +1146,19 @@ namespace ULTRADROID.Weapon.API
                     Type direct = assembly.GetType(name, false);
 
                     if (direct != null)
+                    {
+                        typeCache[name] = direct;
                         return direct;
+                    }
 
                     foreach (Type candidate in assembly.GetTypes())
                     {
                         if (candidate != null &&
                             candidate.Name == name)
+                        {
+                            typeCache[name] = candidate;
                             return candidate;
+                        }
                     }
                 }
                 catch (ReflectionTypeLoadException ex)
@@ -1071,7 +1170,10 @@ namespace ULTRADROID.Weapon.API
                     {
                         if (candidate != null &&
                             candidate.Name == name)
+                        {
+                            typeCache[name] = candidate;
                             return candidate;
+                        }
                     }
                 }
                 catch { }
@@ -1448,13 +1550,8 @@ namespace ULTRADROID.Weapon.API
                     Time.frameCount);
             }
 
-            if (Time.frameCount % 300 == 0)
-            {
-                WeaponGameRuntime.DebugLog(
-                    "Runtime heartbeat; frame=" +
-                    Time.frameCount);
-            }
-
+            // No periodic heartbeat: it adds log noise without proving more than
+            // the successful runtime discovery/startup messages already show.
             WeaponGameRuntime.Tick();
         }
     }
