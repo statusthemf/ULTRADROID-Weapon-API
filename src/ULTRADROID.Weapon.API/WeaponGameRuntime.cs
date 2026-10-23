@@ -19,6 +19,12 @@ namespace ULTRADROID.Weapon.API
             new Dictionary<string, GameObject>(
                 StringComparer.OrdinalIgnoreCase);
 
+        private readonly Dictionary<string, int> weaponSlots =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        private readonly Dictionary<int, string> slotOwners =
+            new Dictionary<int, string>();
+
         private object gunControl;
         private IntPtr gunControlPointer = IntPtr.Zero;
         private int lastScanFrame = -120;
@@ -67,42 +73,34 @@ namespace ULTRADROID.Weapon.API
 
         public static bool SelectWeapon(string weaponId)
         {
-            if (current == null || string.IsNullOrWhiteSpace(weaponId))
-                return false;
-
-            object slots = GetMember(current.gunControl, "slots");
-            if (slots == null)
-                return false;
-
-            string expected = "ULTRADROID_WEAPON_" + SafeName(weaponId);
-
-            for (int i = 6; i < Count(slots); i++)
+            if (current == null ||
+                !current.IsInitialized ||
+                string.IsNullOrWhiteSpace(weaponId))
             {
-                object slot = Item(slots, i);
-
-                for (int j = 0; j < Count(slot); j++)
-                {
-                    GameObject weapon = Item(slot, j) as GameObject;
-
-                    if (weapon == null || weapon.name != expected)
-                        continue;
-
-                    try
-                    {
-                        Invoke(current.gunControl, "SwitchWeapon", 7, false);
-                        current.Log("Selected " + weaponId + " using slot 7.");
-                        return true;
-                    }
-                    catch (Exception ex)
-                    {
-                        current.Log("Weapon selection failed: " + Unwrap(ex));
-                        return false;
-                    }
-                }
+                return false;
             }
 
-            current.Log("Weapon not registered in slot 7: " + weaponId);
-            return false;
+            if (!current.weaponSlots.TryGetValue(
+                weaponId, out int slotNumber))
+            {
+                current.Log("Weapon has no registered slot: " + weaponId);
+                return false;
+            }
+
+            try
+            {
+                Invoke(current.gunControl, "SwitchWeapon", slotNumber, false);
+
+                current.Log("Selected '" + weaponId +
+                    "' using slot " + slotNumber + ".");
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                current.Log("Weapon selection failed: " + Unwrap(ex));
+                return false;
+            }
         }
 
         private void UpdateRuntime()
@@ -120,6 +118,13 @@ namespace ULTRADROID.Weapon.API
                 {
                     IsInitialized = false;
                     GunControlInstance = null;
+                    gunControl = null;
+                    gunControlPointer = IntPtr.Zero;
+
+                    nativeWeapons.Clear();
+                    weaponSlots.Clear();
+                    slotOwners.Clear();
+
                     return;
                 }
 
@@ -136,6 +141,8 @@ namespace ULTRADROID.Weapon.API
                     IsInitialized = true;
 
                     nativeWeapons.Clear();
+                    weaponSlots.Clear();
+                    slotOwners.Clear();
 
                     Log("Connected to initialized GunControl.");
                 }
@@ -164,41 +171,133 @@ namespace ULTRADROID.Weapon.API
             foreach (WeaponDefinition definition in WeaponRegistry.GetAll())
             {
                 if (definition == null ||
-                    nativeWeapons.ContainsKey(definition.Id))
+                    string.IsNullOrWhiteSpace(definition.Id))
                     continue;
 
-                GameObject existing =
-                    FindExistingWeapon(slots, definition.Id);
+                if (nativeWeapons.ContainsKey(definition.Id))
+                    continue;
+
+                GameObject existing = FindExistingWeapon(
+                    slots, definition.Id, out int existingSlot);
 
                 if (existing != null)
                 {
                     nativeWeapons[definition.Id] = existing;
+                    weaponSlots[definition.Id] = existingSlot;
+                    slotOwners[existingSlot] = definition.Id;
+
+                    Log("Found existing weapon '" + definition.Id +
+                        "' in slot " + existingSlot + ".");
+
+                    continue;
+                }
+
+                int targetSlot = ResolveTargetSlot(definition, slots);
+
+                if (targetSlot < 7)
+                {
+                    Log("Invalid custom slot " + targetSlot +
+                        " for weapon '" + definition.Id + "'.");
+                    continue;
+                }
+
+                if (slotOwners.TryGetValue(targetSlot, out string owner) &&
+                    !string.Equals(
+                        owner, definition.Id,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    Log("Slot " + targetSlot + " is already assigned to '" +
+                        owner + "'. Cannot register '" + definition.Id + "'.");
                     continue;
                 }
 
                 if (!TryRegisterDefinition(
-                    slots, definition, out GameObject created))
+                    slots, definition, targetSlot,
+                    out GameObject created))
+                {
                     continue;
+                }
 
                 nativeWeapons[definition.Id] = created;
-
-                int slotNumber = Count(slots);
+                weaponSlots[definition.Id] = targetSlot;
+                slotOwners[targetSlot] = definition.Id;
 
                 Log("Registered '" + definition.DisplayName +
-                    "' in native slot " + slotNumber + ".");
-
+                    "' in native slot " + targetSlot + ".");
             }
+        }
+
+        private int ResolveTargetSlot(
+            WeaponDefinition definition,
+            object slots)
+        {
+            int requested = definition.PreferredSlot;
+
+            if (requested >= 7)
+                return requested;
+
+            if (requested != -1)
+            {
+                Log("PreferredSlot must be -1 (automatic) or at least 7. " +
+                    "Weapon: " + definition.Id);
+                return -1;
+            }
+
+            // Keep the first six vanilla slots unchanged.
+            // Existing custom slots are already represented in the slot list.
+            int candidate = Math.Max(7, Count(slots) + 1);
+
+            while (slotOwners.ContainsKey(candidate))
+                candidate++;
+
+            return candidate;
         }
 
         private bool TryRegisterDefinition(
             object slots,
             WeaponDefinition definition,
+            int targetSlot,
             out GameObject createdWeapon)
         {
             createdWeapon = null;
 
             try
             {
+                if (targetSlot < 7)
+                    return false;
+
+                // Slot number 7 corresponds to list index 6.
+                int targetIndex = targetSlot - 1;
+
+                while (Count(slots) <= targetIndex)
+                {
+                    object newSlot = CreateEmptySlot(slots);
+
+                    if (newSlot == null)
+                    {
+                        Log("Could not create native slot " +
+                            (Count(slots) + 1) + ".");
+                        return false;
+                    }
+
+                    Add(slots, newSlot);
+                }
+
+                object targetSlotObject = Item(slots, targetIndex);
+
+                if (targetSlotObject == null)
+                {
+                    Log("Native slot " + targetSlot + " is unavailable.");
+                    return false;
+                }
+
+                if (Count(targetSlotObject) > 0)
+                {
+                    Log("Native slot " + targetSlot +
+                        " is not empty. Refusing to overwrite it.");
+                    return false;
+                }
+
                 GameObject template = FindTemplateWeapon(slots);
 
                 if (template == null)
@@ -207,30 +306,6 @@ namespace ULTRADROID.Weapon.API
                         definition.Id + "'.");
                     return false;
                 }
-
-                object targetSlot;
-
-                if (Count(slots) < 7)
-                {
-                    object newSlot = CreateEmptySlot(slots);
-
-                    if (newSlot == null)
-                    {
-                        Log("Could not create native slot for '" +
-                            definition.Id + "'.");
-                        return false;
-                    }
-
-                    Add(slots, newSlot);
-                    targetSlot = Item(slots, Count(slots) - 1);
-                }
-                else
-                {
-                    targetSlot = Item(slots, 6);
-                }
-
-                if (targetSlot == null)
-                    return false;
 
                 createdWeapon = UnityEngine.Object.Instantiate(
                     template, template.transform.parent);
@@ -249,12 +324,12 @@ namespace ULTRADROID.Weapon.API
                     UnityEngine.Object.Destroy(createdWeapon);
                     createdWeapon = null;
 
-                    Log("Could not assign a unique WeaponDescriptor to '" +
+                    Log("Could not assign WeaponDescriptor to '" +
                         definition.Id + "'.");
                     return false;
                 }
 
-                Add(targetSlot, createdWeapon);
+                Add(targetSlotObject, createdWeapon);
 
                 try
                 {
@@ -276,6 +351,7 @@ namespace ULTRADROID.Weapon.API
 
                 Log("Native registration failed for '" +
                     definition.Id + "': " + Unwrap(ex));
+
                 return false;
             }
         }
@@ -321,9 +397,14 @@ namespace ULTRADROID.Weapon.API
         }
 
         private static GameObject FindExistingWeapon(
-            object slots, string id)
+            object slots,
+            string id,
+            out int slotNumber)
         {
-            string expected = "ULTRADROID_WEAPON_" + SafeName(id);
+            slotNumber = -1;
+
+            string expected =
+                "ULTRADROID_WEAPON_" + SafeName(id);
 
             for (int i = 6; i < Count(slots); i++)
             {
@@ -334,7 +415,10 @@ namespace ULTRADROID.Weapon.API
                     GameObject weapon = Item(slot, j) as GameObject;
 
                     if (weapon != null && weapon.name == expected)
+                    {
+                        slotNumber = i + 1;
                         return weapon;
+                    }
                 }
             }
 
