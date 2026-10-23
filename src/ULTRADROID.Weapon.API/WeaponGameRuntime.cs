@@ -40,7 +40,18 @@ namespace ULTRADROID.Weapon.API
         private object gunControl;
         private IntPtr gunControlPointer = IntPtr.Zero;
         private int lastScanFrame = -120;
+        private int lastWheelTintFrame = -3;
         private string lastDiscoveryMessage;
+
+        private readonly Dictionary<int, WheelImageTintRecord> wheelImageTints =
+            new Dictionary<int, WheelImageTintRecord>();
+
+        private sealed class WheelImageTintRecord
+        {
+            public object Image;
+            public Color OriginalColor;
+            public Color AppliedColor;
+        }
 
         public bool IsInitialized { get; private set; }
 
@@ -223,6 +234,22 @@ namespace ULTRADROID.Weapon.API
 
         private void UpdateRuntime()
         {
+            // Wheel visuals need to update more frequently than weapon discovery.
+            if (Time.frameCount - lastWheelTintFrame >= 3)
+            {
+                lastWheelTintFrame = Time.frameCount;
+
+                try
+                {
+                    UpdateWheelTints();
+                }
+                catch (Exception ex)
+                {
+                    Log("Wheel tint update failed: " + Unwrap(ex));
+                }
+            }
+
+            // Keep the existing, slower GunControl discovery interval.
             if (Time.frameCount - lastScanFrame < 60)
                 return;
 
@@ -981,6 +1008,189 @@ namespace ULTRADROID.Weapon.API
             {
                 DebugLog("Custom tint failed for '" + weapon.name + "': " + Unwrap(ex));
             }
+        }
+
+        private void UpdateWheelTints()
+        {
+            Type wheelType = FindType("WeaponWheel");
+
+            if (wheelType == null)
+            {
+                RestoreWheelImageTints(new HashSet<int>());
+                return;
+            }
+
+            object wheels = UnityEngine.Object.FindObjectsOfType(
+                Il2CppType.From(wheelType));
+
+            var desired = new Dictionary<int, Tuple<object, Color>>();
+
+            for (int wi = 0; wi < Count(wheels); wi++)
+            {
+                object wheel = WrapInstance(wheelType, Item(wheels, wi));
+
+                if (wheel == null)
+                    continue;
+
+                object segments = GetMember(wheel, "segments");
+
+                for (int si = 0; si < Count(segments); si++)
+                {
+                    object segment = Item(segments, si);
+
+                    if (segment == null)
+                        continue;
+
+                    object descriptor = GetMember(segment, "descriptor");
+
+                    string displayName = Convert.ToString(
+                        GetMember(descriptor, "weaponName"));
+
+                    if (string.IsNullOrWhiteSpace(displayName))
+                        continue;
+
+                    Color? tint = FindWheelTint(displayName);
+
+                    if (!tint.HasValue)
+                        continue;
+
+                    AddDesiredWheelImage(
+                        desired,
+                        GetMember(segment, "icon"),
+                        tint.Value);
+
+                    AddDesiredWheelImage(
+                        desired,
+                        GetMember(segment, "iconGlow"),
+                        tint.Value);
+                }
+            }
+
+            foreach (KeyValuePair<int, Tuple<object, Color>> item in desired)
+            {
+                if (!wheelImageTints.TryGetValue(
+                    item.Key,
+                    out WheelImageTintRecord record))
+                {
+                    object image = item.Value.Item1;
+
+                    if (image == null)
+                        continue;
+
+                    object rawColor = GetMember(image, "color");
+
+                    if (!(rawColor is Color original))
+                        continue;
+
+                    record = new WheelImageTintRecord
+                    {
+                        Image = image,
+                        OriginalColor = original,
+                        AppliedColor = item.Value.Item2
+                    };
+
+                    wheelImageTints[item.Key] = record;
+                }
+
+                record.AppliedColor = item.Value.Item2;
+
+                SetMember(record.Image, "color", item.Value.Item2);
+            }
+
+            RestoreWheelImageTints(new HashSet<int>(desired.Keys));
+        }
+
+        private Color? FindWheelTint(string displayName)
+        {
+            foreach (WeaponDefinition definition in WeaponRegistry.GetAll())
+            {
+                if (definition == null)
+                    continue;
+
+                foreach (WeaponVariantDefinition variant in definition.Variants)
+                {
+                    if (variant == null ||
+                        !variant.WheelTintEnabled ||
+                        !variant.WheelTint.HasValue ||
+                        string.IsNullOrWhiteSpace(variant.DisplayName))
+                    {
+                        continue;
+                    }
+
+                    if (string.Equals(
+                        displayName,
+                        variant.DisplayName,
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        return variant.WheelTint.Value;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static void AddDesiredWheelImage(
+            Dictionary<int, Tuple<object, Color>> desired,
+            object image,
+            Color tint)
+        {
+            if (image == null)
+                return;
+
+            try
+            {
+                int id = Convert.ToInt32(
+                    Invoke(image, "GetInstanceID"));
+
+                if (id != 0)
+                    desired[id] = Tuple.Create(image, tint);
+            }
+            catch
+            {
+                // An unavailable or destroyed UI image should not break the runtime.
+            }
+        }
+
+        private void RestoreWheelImageTints(HashSet<int> desiredIds)
+        {
+            var remove = new List<int>();
+
+            foreach (KeyValuePair<int, WheelImageTintRecord> pair in wheelImageTints)
+            {
+                if (desiredIds.Contains(pair.Key))
+                    continue;
+
+                WheelImageTintRecord record = pair.Value;
+
+                if (record != null && record.Image != null)
+                {
+                    object rawColor = GetMember(record.Image, "color");
+
+                    // Restore only if the current color is still the one we applied.
+                    // This avoids overwriting a color changed by another mod.
+                    if (rawColor is Color currentColor &&
+                        ColorsApproximatelyEqual(
+                            currentColor,
+                            record.AppliedColor))
+                    {
+                        SetMember(record.Image, "color", record.OriginalColor);
+                    }
+                }
+
+                remove.Add(pair.Key);
+            }
+
+            foreach (int id in remove)
+                wheelImageTints.Remove(id);
+        }
+
+        private static bool ColorsApproximatelyEqual(Color a, Color b)
+        {
+            return Mathf.Abs(a.r - b.r) < 0.01f &&
+                   Mathf.Abs(a.g - b.g) < 0.01f &&
+                   Mathf.Abs(a.b - b.b) < 0.01f &&
+                   Mathf.Abs(a.a - b.a) < 0.01f;
         }
 
         private static void ApplyIconTint(GameObject weapon, Color tint)
