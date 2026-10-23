@@ -952,7 +952,7 @@ namespace ULTRADROID.Weapon.API
             if (color != WeaponVariantColor.Default &&
                 !TrySetNativeVariantColor(descriptor, color))
             {
-                Log(
+                DebugLog(
                     "Warning: could not set native variationColor to '" +
                     color + "' for descriptor '" + displayName + "'.");
                 return false;
