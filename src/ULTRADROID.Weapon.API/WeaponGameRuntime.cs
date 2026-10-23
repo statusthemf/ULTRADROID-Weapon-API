@@ -12,7 +12,6 @@ namespace ULTRADROID.Weapon.API
     public sealed class WeaponGameRuntime
     {
         private static WeaponGameRuntime current;
-        private static bool componentRegistered;
 
         private readonly Action<string> log;
 
