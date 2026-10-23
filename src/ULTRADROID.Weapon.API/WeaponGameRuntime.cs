@@ -989,7 +989,10 @@ namespace ULTRADROID.Weapon.API
 
             try
             {
-                Renderer[] renderers = weapon.GetComponentsInChildren<Renderer>(true);
+                Renderer[] renderers =
+                    weapon.GetComponentsInChildren<Renderer>(true);
+
+                MaterialPropertyBlock block = new MaterialPropertyBlock();
                 int tinted = 0;
 
                 foreach (Renderer renderer in renderers)
@@ -997,37 +1000,45 @@ namespace ULTRADROID.Weapon.API
                     if (renderer == null)
                         continue;
 
-                    Material[] materials = renderer.materials;
-                    bool changed = false;
+                    Material[] materials = renderer.sharedMaterials;
 
                     for (int i = 0; i < materials.Length; i++)
                     {
                         Material material = materials[i];
+
                         if (material == null)
                             continue;
 
-                        if (material.HasProperty("_Color"))
-                        {
-                            material.color = tint;
-                            changed = true;
-                        }
-                        else if (material.HasProperty("_BaseColor"))
-                        {
-                            material.SetColor("_BaseColor", tint);
-                            changed = true;
-                        }
-                    }
+                        int colorProperty = 0;
 
-                    if (changed)
+                        if (material.HasProperty("_Color"))
+                            colorProperty = Shader.PropertyToID("_Color");
+                        else if (material.HasProperty("_BaseColor"))
+                            colorProperty = Shader.PropertyToID("_BaseColor");
+
+                        if (colorProperty == 0)
+                            continue;
+
+                        renderer.GetPropertyBlock(block, i);
+                        block.SetColor(colorProperty, tint);
+                        renderer.SetPropertyBlock(block, i);
+
                         tinted++;
+                    }
                 }
 
                 if (tinted == 0)
-                    DebugLog("Custom tint could not find a supported material color property on '" + weapon.name + "'.");
+                {
+                    DebugLog(
+                        "Custom tint found no supported material color properties on '" +
+                        weapon.name + "'.");
+                }
             }
             catch (Exception ex)
             {
-                DebugLog("Custom tint failed for '" + weapon.name + "': " + Unwrap(ex));
+                DebugLog(
+                    "Custom tint failed for '" + weapon.name +
+                    "': " + Unwrap(ex));
             }
         }
 
