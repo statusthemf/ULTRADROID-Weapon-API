@@ -148,10 +148,11 @@ namespace ULTRADROID.Weapon.API
             }
         }
 
-        /// <summary>
+        /// **Summary:**
+
         /// Selects a registered custom variant by ID.
         /// The index is resolved from the actual native family list.
-        /// </summary>
+        /// 
         public static bool SelectVariant(
             string weaponId,
             string variantId)
@@ -247,6 +248,15 @@ namespace ULTRADROID.Weapon.API
                 catch (Exception ex)
                 {
                     Log("Wheel tint update failed: " + Unwrap(ex));
+                }
+
+                try
+                {
+                    UpdateHudIconTints();
+                }
+                catch (Exception ex)
+                {
+                    Log("HUD icon tint update failed: " + Unwrap(ex));
                 }
             }
 
@@ -1014,6 +1024,82 @@ namespace ULTRADROID.Weapon.API
             catch (Exception ex)
             {
                 DebugLog("Custom tint failed for '" + weapon.name + "': " + Unwrap(ex));
+            }
+        }
+
+        private void UpdateHudIconTints()
+        {
+            if (gunControl == null)
+                return;
+
+            object icons = GetMember(gunControl, "currentWeaponIcons");
+            Type iconType = FindType("WeaponIcon");
+
+            if (icons == null || iconType == null)
+                return;
+
+            for (int i = 0; i < Count(icons); i++)
+            {
+                object icon = WrapInstance(iconType, Item(icons, i));
+
+                if (icon == null)
+                    continue;
+
+                object descriptor = GetMember(icon, "weaponDescriptor");
+                string displayName = Convert.ToString(
+                    GetMember(descriptor, "weaponName"));
+
+                if (string.IsNullOrWhiteSpace(displayName))
+                    continue;
+
+                Color? tint = null;
+
+                foreach (WeaponDefinition definition in WeaponRegistry.GetAll())
+                {
+                    if (definition == null)
+                        continue;
+
+                    foreach (WeaponVariantDefinition variant in definition.Variants)
+                    {
+                        if (variant == null ||
+                            !string.Equals(
+                                displayName,
+                                variant.DisplayName,
+                                StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        tint = variant.IconTint
+                            ?? variant.ModelTint
+                            ?? variant.CustomTint;
+
+                        if (tint.HasValue)
+                            break;
+                    }
+
+                    if (tint.HasValue)
+                        break;
+                }
+
+                if (!tint.HasValue)
+                    continue;
+
+                object images = GetMember(icon, "variationColoredImages");
+
+                for (int j = 0; j < Count(images); j++)
+                {
+                    object image = Item(images, j);
+
+                    if (image == null)
+                        continue;
+
+                    object current = GetMember(image, "color");
+
+                    if (current is Color currentColor &&
+                        ColorsApproximatelyEqual(currentColor, tint.Value))
+                        continue;
+
+                    SetMember(image, "color", tint.Value);
+                }
             }
         }
 
