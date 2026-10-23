@@ -10,7 +10,7 @@ namespace ULTRADROID.WeaponApiExample
     [BepInPlugin(
         "somerandommaid.ultradroid.weaponapiexample",
         "ULTRADROID Weapon API Example",
-        "1.3.1")]
+        "1.3.2")]
     [BepInDependency(
         ULTRADROIDControls.PluginGuid,
         BepInDependency.DependencyFlags.HardDependency)]
@@ -18,6 +18,7 @@ namespace ULTRADROID.WeaponApiExample
     {
         private ButtonHandle weapon7Button;
         private ButtonHandle weapon8Button;
+        private ButtonHandle weapon9Button;
 
         public override void Load()
         {
@@ -28,11 +29,13 @@ namespace ULTRADROID.WeaponApiExample
             {
                 RegisterBladesOfChaos();
                 RegisterCustomGun();
+                RegisterGoldRevolverTest();
 
                 StartWeaponRuntime();
 
                 RegisterWeaponButton();
                 RegisterWeapon8Button();
+                RegisterWeapon9Button();
 
                 VerifyWeaponRegistration();
             }
@@ -46,300 +49,481 @@ namespace ULTRADROID.WeaponApiExample
         private void RegisterBladesOfChaos()
         {
             WeaponDefinition blades = new WeaponDefinition(
-                "chaos_blades",
-                "Blades of Chaos")
+                "chaos_blades", "Blades of Chaos")
             {
                 Category = "Melee",
                 PreferredSlot = 7
             };
 
-            // Variant 1: Standard Blades.
-            WeaponVariantDefinition standard =
-                new WeaponVariantDefinition(
-                    "standard",
-                    "Standard Blades")
+            // Blue Blades: independent primary, alternate, and extra attack definitions.
+            WeaponVariantDefinition blue =
+                new WeaponVariantDefinition("blue", "Blue Blades")
                 {
+                    Color = WeaponVariantColor.Blue,
+                    CustomTint = new Color(0.10f, 0.35f, 1.0f),
                     PrimaryAttack = new WeaponAttackDefinition(
-                        "chain_slash",
-                        WeaponAttackKind.Melee)
+                        "blue_chain_slash", WeaponAttackKind.Melee)
                     {
                         Damage = 25f,
                         Range = 3.5f,
                         CooldownSeconds = 0.45f,
+                        ProjectileSpeed = 0f,
                         Execute = context =>
                         {
-                            Log.LogInfo(
-                                "Standard primary callback: " +
-                                context.WeaponId + " / " +
-                                context.VariantId);
+                            Log.LogInfo("Blue Blades primary callback: " +
+                                context.WeaponId + " / " + context.VariantId);
                         }
                     },
-
                     AlternateAttack = new WeaponAttackDefinition(
-                        "chain_throw",
-                        WeaponAttackKind.Projectile)
+                        "blue_chain_throw", WeaponAttackKind.Projectile)
                     {
                         Damage = 40f,
                         Range = 15f,
-                        ProjectileSpeed = 20f,
                         CooldownSeconds = 1.5f,
+                        ProjectileSpeed = 20f,
                         Execute = context =>
                         {
-                            Log.LogInfo(
-                                "Standard alternate callback: " +
-                                context.WeaponId + " / " +
-                                context.VariantId);
+                            Log.LogInfo("Blue Blades alternate callback: " +
+                                context.WeaponId + " / " + context.VariantId);
                         }
                     }
                 };
 
-            standard.AddAttack(
-                new WeaponAttackDefinition(
-                    "heavy_slash",
-                    WeaponAttackKind.Melee)
-                {
-                    Damage = 40f,
-                    Range = 4f,
-                    CooldownSeconds = 0.9f,
-                    Execute = context =>
-                    {
-                        Log.LogInfo(
-                            "Heavy slash callback: " +
-                            context.WeaponId + " / " +
-                            context.VariantId);
-                    }
-                });
-
-            standard.AddAttack(
-                new WeaponAttackDefinition(
-                    "chain_pull",
-                    WeaponAttackKind.Custom)
-                {
-                    Range = 12f,
-                    CooldownSeconds = 2f,
-                    Execute = context =>
-                    {
-                        Log.LogInfo(
-                            "Chain pull callback: " +
-                            context.WeaponId + " / " +
-                            context.VariantId);
-                    }
-                });
-
-            standard.AddAttack(
-                new WeaponAttackDefinition(
-                    "spin_attack",
-                    WeaponAttackKind.Area)
+            blue.AddAttack(
+                new WeaponAttackDefinition("blue_spin", WeaponAttackKind.Area)
                 {
                     Damage = 20f,
                     Range = 4f,
                     CooldownSeconds = 2.5f,
                     Execute = context =>
                     {
-                        Log.LogInfo(
-                            "Spin attack callback: " +
-                            context.WeaponId + " / " +
-                            context.VariantId);
+                        Log.LogInfo("Blue Blades extra attack callback: " +
+                            context.WeaponId + " / " + context.VariantId);
                     }
                 });
+            blades.AddVariant(blue);
 
-            blades.AddVariant(standard);
-
-            // Variant 2: Heavy Blades.
-            WeaponVariantDefinition heavy =
-                new WeaponVariantDefinition(
-                    "heavy",
-                    "Heavy Blades")
+            // Green Blades: independent primary, alternate, and extra attack definitions.
+            WeaponVariantDefinition green =
+                new WeaponVariantDefinition("green", "Green Blades")
                 {
+                    Color = WeaponVariantColor.Green,
+                    CustomTint = new Color(0.10f, 1.0f, 0.20f),
                     PrimaryAttack = new WeaponAttackDefinition(
-                        "heavy_primary",
-                        WeaponAttackKind.Melee)
+                        "green_chain_slash", WeaponAttackKind.Melee)
                     {
-                        Damage = 65f,
-                        Range = 4.5f,
-                        CooldownSeconds = 1.1f,
+                        Damage = 28f,
+                        Range = 3.6f,
+                        CooldownSeconds = 0.42f,
+                        ProjectileSpeed = 0f,
                         Execute = context =>
                         {
-                            Log.LogInfo(
-                                "Heavy variant primary callback: " +
-                                context.WeaponId + " / " +
-                                context.VariantId);
+                            Log.LogInfo("Green Blades primary callback: " +
+                                context.WeaponId + " / " + context.VariantId);
                         }
                     },
-
                     AlternateAttack = new WeaponAttackDefinition(
-                        "heavy_shockwave",
-                        WeaponAttackKind.Area)
+                        "green_chain_throw", WeaponAttackKind.Projectile)
                     {
-                        Damage = 50f,
-                        Range = 7f,
-                        CooldownSeconds = 2.2f,
+                        Damage = 42f,
+                        Range = 15.5f,
+                        CooldownSeconds = 1.4f,
+                        ProjectileSpeed = 21f,
                         Execute = context =>
                         {
-                            Log.LogInfo(
-                                "Heavy variant alternate callback: " +
-                                context.WeaponId + " / " +
-                                context.VariantId);
+                            Log.LogInfo("Green Blades alternate callback: " +
+                                context.WeaponId + " / " + context.VariantId);
                         }
                     }
                 };
 
-            heavy.AddAttack(
-                new WeaponAttackDefinition(
-                    "ground_slam",
-                    WeaponAttackKind.Area)
+            green.AddAttack(
+                new WeaponAttackDefinition("green_chain_pull", WeaponAttackKind.Custom)
                 {
-                    Damage = 80f,
-                    Range = 6f,
-                    CooldownSeconds = 3f,
+                    Damage = 0f,
+                    Range = 12f,
+                    CooldownSeconds = 2.0f,
                     Execute = context =>
                     {
-                        Log.LogInfo(
-                            "Ground slam callback: " +
-                            context.WeaponId + " / " +
-                            context.VariantId);
+                        Log.LogInfo("Green Blades extra attack callback: " +
+                            context.WeaponId + " / " + context.VariantId);
                     }
                 });
+            blades.AddVariant(green);
 
-            blades.AddVariant(heavy);
-
-            // Variant 3: Gold Blades.
-            // This requests the native Gold variant color.
-            // Its attacks are intentionally independent from
-            // the Standard and Heavy definitions.
-            WeaponVariantDefinition gold =
-                new WeaponVariantDefinition(
-                    "gold",
-                    "Gold Blades")
+            // Red Blades: independent primary, alternate, and extra attack definitions.
+            WeaponVariantDefinition red =
+                new WeaponVariantDefinition("red", "Red Blades")
                 {
-                    Color = WeaponVariantColor.Gold,
-
+                    Color = WeaponVariantColor.Red,
+                    CustomTint = new Color(1.0f, 0.08f, 0.08f),
                     PrimaryAttack = new WeaponAttackDefinition(
-                        "gold_primary",
-                        WeaponAttackKind.Melee)
+                        "red_chain_slash", WeaponAttackKind.Melee)
+                    {
+                        Damage = 32f,
+                        Range = 3.8f,
+                        CooldownSeconds = 0.5f,
+                        ProjectileSpeed = 0f,
+                        Execute = context =>
+                        {
+                            Log.LogInfo("Red Blades primary callback: " +
+                                context.WeaponId + " / " + context.VariantId);
+                        }
+                    },
+                    AlternateAttack = new WeaponAttackDefinition(
+                        "red_chain_throw", WeaponAttackKind.Projectile)
+                    {
+                        Damage = 48f,
+                        Range = 16f,
+                        CooldownSeconds = 1.6f,
+                        ProjectileSpeed = 22f,
+                        Execute = context =>
+                        {
+                            Log.LogInfo("Red Blades alternate callback: " +
+                                context.WeaponId + " / " + context.VariantId);
+                        }
+                    }
+                };
+
+            red.AddAttack(
+                new WeaponAttackDefinition("red_ground_slam", WeaponAttackKind.Area)
+                {
+                    Damage = 55f,
+                    Range = 6f,
+                    CooldownSeconds = 2.8f,
+                    Execute = context =>
+                    {
+                        Log.LogInfo("Red Blades extra attack callback: " +
+                            context.WeaponId + " / " + context.VariantId);
+                    }
+                });
+            blades.AddVariant(red);
+
+            // Black Blades: independent primary, alternate, and extra attack definitions.
+            WeaponVariantDefinition black_blades =
+                new WeaponVariantDefinition("black_blades", "Black Blades")
+                {
+                    Color = WeaponVariantColor.Default,
+                    CustomTint = new Color(0.025f, 0.025f, 0.035f),
+                    PrimaryAttack = new WeaponAttackDefinition(
+                        "black_chain_slash", WeaponAttackKind.Melee)
                     {
                         Damage = 35f,
-                        Range = 3.8f,
-                        CooldownSeconds = 0.4f,
+                        Range = 4f,
+                        CooldownSeconds = 0.55f,
+                        ProjectileSpeed = 0f,
                         Execute = context =>
                         {
-                            Log.LogInfo(
-                                "Gold variant primary callback: " +
-                                context.WeaponId + " / " +
-                                context.VariantId);
+                            Log.LogInfo("Black Blades primary callback: " +
+                                context.WeaponId + " / " + context.VariantId);
                         }
                     },
-
                     AlternateAttack = new WeaponAttackDefinition(
-                        "gold_chain_throw",
-                        WeaponAttackKind.Projectile)
+                        "black_chain_throw", WeaponAttackKind.Projectile)
                     {
-                        Damage = 45f,
-                        Range = 16f,
-                        ProjectileSpeed = 22f,
-                        CooldownSeconds = 1.35f,
+                        Damage = 50f,
+                        Range = 17f,
+                        CooldownSeconds = 1.7f,
+                        ProjectileSpeed = 23f,
                         Execute = context =>
                         {
-                            Log.LogInfo(
-                                "Gold variant alternate callback: " +
-                                context.WeaponId + " / " +
-                                context.VariantId);
+                            Log.LogInfo("Black Blades alternate callback: " +
+                                context.WeaponId + " / " + context.VariantId);
                         }
                     }
                 };
 
-            gold.AddAttack(
-                new WeaponAttackDefinition(
-                    "gold_spin",
-                    WeaponAttackKind.Area)
+            black_blades.AddAttack(
+                new WeaponAttackDefinition("black_spin", WeaponAttackKind.Area)
                 {
-                    Damage = 30f,
+                    Damage = 35f,
                     Range = 4.5f,
-                    CooldownSeconds = 2.3f,
+                    CooldownSeconds = 2.6f,
                     Execute = context =>
                     {
-                        Log.LogInfo(
-                            "Gold spin callback: " +
-                            context.WeaponId + " / " +
-                            context.VariantId);
+                        Log.LogInfo("Black Blades extra attack callback: " +
+                            context.WeaponId + " / " + context.VariantId);
                     }
                 });
+            blades.AddVariant(black_blades);
 
-            blades.AddVariant(gold);
-
-            // Legacy weapon-level attacks remain compatible.
-            blades.PrimaryAttack = standard.PrimaryAttack;
-            blades.AlternateAttack = standard.AlternateAttack;
-
+            blades.PrimaryAttack = blue.PrimaryAttack;
+            blades.AlternateAttack = blue.AlternateAttack;
             WeaponRegistry.Register(blades);
-
-            Log.LogInfo(
-                "Registered weapon: " +
-                blades.DisplayName + " (" + blades.Id + ").");
-
-            Log.LogInfo(
-                "Blades of Chaos variants registered: " +
-                blades.Variants.Count);
+            Log.LogInfo("Registered Blades of Chaos with Blue, Green, Red, Black variants.");
+            Log.LogInfo("Blades of Chaos variant count: " + blades.Variants.Count);
         }
 
         private void RegisterCustomGun()
         {
             WeaponDefinition customGun = new WeaponDefinition(
-                "custom_gun",
-                "Custom Gun")
+                "custom_gun", "Custom Gun")
             {
                 Category = "Ranged",
                 PreferredSlot = 8
             };
 
-            WeaponVariantDefinition standard =
-                new WeaponVariantDefinition(
-                    "standard",
-                    "Standard Custom Gun")
+            // Pink Custom Gun: independent primary, alternate, and extra attack definitions.
+            WeaponVariantDefinition pink =
+                new WeaponVariantDefinition("pink", "Pink Custom Gun")
                 {
+                    Color = WeaponVariantColor.Default,
+                    CustomTint = new Color(1.0f, 0.15f, 0.55f),
                     PrimaryAttack = new WeaponAttackDefinition(
-                        "custom_gun_primary",
-                        WeaponAttackKind.Projectile)
+                        "pink_primary", WeaponAttackKind.Projectile)
                     {
                         Damage = 30f,
+                        Range = 50f,
+                        CooldownSeconds = 0.25f,
+                        ProjectileSpeed = 40f,
+                        Execute = context =>
+                        {
+                            Log.LogInfo("Pink Custom Gun primary callback: " +
+                                context.WeaponId + " / " + context.VariantId);
+                        }
+                    },
+                    AlternateAttack = new WeaponAttackDefinition(
+                        "pink_alt", WeaponAttackKind.Custom)
+                    {
+                        Damage = 20f,
+                        Range = 30f,
+                        CooldownSeconds = 1f,
+                        ProjectileSpeed = 0f,
+                        Execute = context =>
+                        {
+                            Log.LogInfo("Pink Custom Gun alternate callback: " +
+                                context.WeaponId + " / " + context.VariantId);
+                        }
+                    }
+                };
+
+            pink.AddAttack(
+                new WeaponAttackDefinition("pink_burst", WeaponAttackKind.Projectile)
+                {
+                    Damage = 15f,
+                    Range = 45f,
+                    CooldownSeconds = 1.8f,
+                    Execute = context =>
+                    {
+                        Log.LogInfo("Pink Custom Gun extra attack callback: " +
+                            context.WeaponId + " / " + context.VariantId);
+                    }
+                });
+            customGun.AddVariant(pink);
+
+            // Purple Custom Gun: independent primary, alternate, and extra attack definitions.
+            WeaponVariantDefinition purple =
+                new WeaponVariantDefinition("purple", "Purple Custom Gun")
+                {
+                    Color = WeaponVariantColor.Default,
+                    CustomTint = new Color(0.55f, 0.12f, 0.95f),
+                    PrimaryAttack = new WeaponAttackDefinition(
+                        "purple_primary", WeaponAttackKind.Projectile)
+                    {
+                        Damage = 34f,
+                        Range = 52f,
+                        CooldownSeconds = 0.28f,
+                        ProjectileSpeed = 42f,
+                        Execute = context =>
+                        {
+                            Log.LogInfo("Purple Custom Gun primary callback: " +
+                                context.WeaponId + " / " + context.VariantId);
+                        }
+                    },
+                    AlternateAttack = new WeaponAttackDefinition(
+                        "purple_alt", WeaponAttackKind.Custom)
+                    {
+                        Damage = 25f,
+                        Range = 32f,
+                        CooldownSeconds = 1.1f,
+                        ProjectileSpeed = 0f,
+                        Execute = context =>
+                        {
+                            Log.LogInfo("Purple Custom Gun alternate callback: " +
+                                context.WeaponId + " / " + context.VariantId);
+                        }
+                    }
+                };
+
+            purple.AddAttack(
+                new WeaponAttackDefinition("purple_pulse", WeaponAttackKind.Area)
+                {
+                    Damage = 22f,
+                    Range = 5f,
+                    CooldownSeconds = 2.0f,
+                    Execute = context =>
+                    {
+                        Log.LogInfo("Purple Custom Gun extra attack callback: " +
+                            context.WeaponId + " / " + context.VariantId);
+                    }
+                });
+            customGun.AddVariant(purple);
+
+            // White Custom Gun: independent primary, alternate, and extra attack definitions.
+            WeaponVariantDefinition white =
+                new WeaponVariantDefinition("white", "White Custom Gun")
+                {
+                    Color = WeaponVariantColor.Default,
+                    CustomTint = new Color(1.0f, 1.0f, 1.0f),
+                    PrimaryAttack = new WeaponAttackDefinition(
+                        "white_primary", WeaponAttackKind.Projectile)
+                    {
+                        Damage = 28f,
+                        Range = 55f,
+                        CooldownSeconds = 0.22f,
+                        ProjectileSpeed = 45f,
+                        Execute = context =>
+                        {
+                            Log.LogInfo("White Custom Gun primary callback: " +
+                                context.WeaponId + " / " + context.VariantId);
+                        }
+                    },
+                    AlternateAttack = new WeaponAttackDefinition(
+                        "white_alt", WeaponAttackKind.Custom)
+                    {
+                        Damage = 18f,
+                        Range = 35f,
+                        CooldownSeconds = 0.9f,
+                        ProjectileSpeed = 0f,
+                        Execute = context =>
+                        {
+                            Log.LogInfo("White Custom Gun alternate callback: " +
+                                context.WeaponId + " / " + context.VariantId);
+                        }
+                    }
+                };
+
+            white.AddAttack(
+                new WeaponAttackDefinition("white_ray", WeaponAttackKind.Projectile)
+                {
+                    Damage = 40f,
+                    Range = 60f,
+                    CooldownSeconds = 2.2f,
+                    Execute = context =>
+                    {
+                        Log.LogInfo("White Custom Gun extra attack callback: " +
+                            context.WeaponId + " / " + context.VariantId);
+                    }
+                });
+            customGun.AddVariant(white);
+
+            // Black Custom Gun: independent primary, alternate, and extra attack definitions.
+            WeaponVariantDefinition black_gun =
+                new WeaponVariantDefinition("black_gun", "Black Custom Gun")
+                {
+                    Color = WeaponVariantColor.Default,
+                    CustomTint = new Color(0.025f, 0.025f, 0.035f),
+                    PrimaryAttack = new WeaponAttackDefinition(
+                        "black_gun_primary", WeaponAttackKind.Projectile)
+                    {
+                        Damage = 38f,
+                        Range = 48f,
+                        CooldownSeconds = 0.32f,
+                        ProjectileSpeed = 38f,
+                        Execute = context =>
+                        {
+                            Log.LogInfo("Black Custom Gun primary callback: " +
+                                context.WeaponId + " / " + context.VariantId);
+                        }
+                    },
+                    AlternateAttack = new WeaponAttackDefinition(
+                        "black_gun_alt", WeaponAttackKind.Custom)
+                    {
+                        Damage = 30f,
+                        Range = 28f,
+                        CooldownSeconds = 1.3f,
+                        ProjectileSpeed = 0f,
+                        Execute = context =>
+                        {
+                            Log.LogInfo("Black Custom Gun alternate callback: " +
+                                context.WeaponId + " / " + context.VariantId);
+                        }
+                    }
+                };
+
+            black_gun.AddAttack(
+                new WeaponAttackDefinition("black_gun_blast", WeaponAttackKind.Area)
+                {
+                    Damage = 35f,
+                    Range = 7f,
+                    CooldownSeconds = 2.4f,
+                    Execute = context =>
+                    {
+                        Log.LogInfo("Black Custom Gun extra attack callback: " +
+                            context.WeaponId + " / " + context.VariantId);
+                    }
+                });
+            customGun.AddVariant(black_gun);
+
+            customGun.PrimaryAttack = pink.PrimaryAttack;
+            customGun.AlternateAttack = pink.AlternateAttack;
+            WeaponRegistry.Register(customGun);
+            Log.LogInfo("Registered Custom Gun with Pink, Purple, White, Black variants.");
+            Log.LogInfo("Custom Gun variant count: " + customGun.Variants.Count);
+        }
+
+        // This is a separate slot-9 clone test. It does not append a variant
+        // to the vanilla Revolver family, because slots 1-6 remain protected.
+        private void RegisterGoldRevolverTest()
+        {
+            WeaponDefinition goldRevolver = new WeaponDefinition(
+                "gold_revolver_test", "Gold Revolver Test")
+            {
+                Category = "Ranged",
+                PreferredSlot = 9
+            };
+
+            WeaponVariantDefinition gold =
+                new WeaponVariantDefinition("gold", "Gold Revolver Test")
+                {
+                    Color = WeaponVariantColor.Gold,
+                    CustomTint = new Color(1.0f, 0.62f, 0.08f),
+                    PrimaryAttack = new WeaponAttackDefinition(
+                        "gold_revolver_primary", WeaponAttackKind.Projectile)
+                    {
+                        Damage = 35f,
                         Range = 50f,
                         ProjectileSpeed = 40f,
                         CooldownSeconds = 0.25f,
                         Execute = context =>
                         {
-                            Log.LogInfo(
-                                "Custom Gun primary callback: " +
-                                context.WeaponId + " / " +
-                                context.VariantId);
+                            Log.LogInfo("Gold Revolver primary callback: " +
+                                context.WeaponId + " / " + context.VariantId);
                         }
                     },
-
                     AlternateAttack = new WeaponAttackDefinition(
-                        "custom_gun_alternate",
-                        WeaponAttackKind.Custom)
+                        "gold_revolver_alternate", WeaponAttackKind.Custom)
                     {
-                        CooldownSeconds = 1f,
+                        Damage = 45f,
+                        Range = 20f,
+                        CooldownSeconds = 1.0f,
                         Execute = context =>
                         {
-                            Log.LogInfo(
-                                "Custom Gun alternate callback: " +
-                                context.WeaponId + " / " +
-                                context.VariantId);
+                            Log.LogInfo("Gold Revolver alternate callback: " +
+                                context.WeaponId + " / " + context.VariantId);
                         }
                     }
                 };
 
-            customGun.AddVariant(standard);
+            gold.AddAttack(new WeaponAttackDefinition(
+                "gold_revolver_ricochet", WeaponAttackKind.Projectile)
+            {
+                Damage = 50f,
+                Range = 60f,
+                ProjectileSpeed = 55f,
+                CooldownSeconds = 1.8f,
+                Execute = context =>
+                {
+                    Log.LogInfo("Gold Revolver ricochet callback: " +
+                        context.WeaponId + " / " + context.VariantId);
+                }
+            });
 
-            customGun.PrimaryAttack = standard.PrimaryAttack;
-            customGun.AlternateAttack = standard.AlternateAttack;
-
-            WeaponRegistry.Register(customGun);
-
-            Log.LogInfo(
-                "Registered weapon: " +
-                customGun.DisplayName + " (" +
-                customGun.Id + ").");
+            goldRevolver.AddVariant(gold);
+            goldRevolver.PrimaryAttack = gold.PrimaryAttack;
+            goldRevolver.AlternateAttack = gold.AlternateAttack;
+            WeaponRegistry.Register(goldRevolver);
+            Log.LogInfo("Registered Gold Revolver Test clone in slot 9; vanilla Revolver family unchanged.");
         }
 
         private void StartWeaponRuntime()
@@ -356,146 +540,106 @@ namespace ULTRADROID.WeaponApiExample
         {
             try
             {
-                weapon7Button = ULTRADROIDControls.AddButton(
-                    new ButtonConfig
-                    {
-                        Id = "ULTRADROID.WeaponApi.SelectChaosBlades",
-                        Label = "W7",
-                        PositionOffset = new Vector2(120f, 90f),
-                        ScaleMultiplier = 1f,
-                        ApplyTint = false,
-                        OnClick = SelectChaosBlades
-                    });
-
-                Log.LogInfo(
-                    "W7 selection button registered.");
+                weapon7Button = ULTRADROIDControls.AddButton(new ButtonConfig
+                {
+                    Id = "ULTRADROID.WeaponApi.SelectChaosBlades",
+                    Label = "W7",
+                    PositionOffset = new Vector2(120f, 90f),
+                    ScaleMultiplier = 1f,
+                    ApplyTint = false,
+                    OnClick = SelectChaosBlades
+                });
+                Log.LogInfo("W7 selection button registered.");
             }
-            catch (Exception ex)
-            {
-                Log.LogError(
-                    "Could not register the W7 button: " + ex);
-            }
+            catch (Exception ex) { Log.LogError("Could not register W7 button: " + ex); }
         }
 
         private void SelectChaosBlades()
         {
             if (!WeaponGameRuntime.SelectWeapon("chaos_blades"))
-            {
-                Log.LogWarning(
-                    "Blades of Chaos is not ready in slot 7 yet.");
-            }
+                Log.LogWarning("Blades of Chaos is not ready in slot 7 yet.");
         }
 
         private void RegisterWeapon8Button()
         {
             try
             {
-                weapon8Button = ULTRADROIDControls.AddButton(
-                    new ButtonConfig
-                    {
-                        Id = "ULTRADROID.WeaponApi.SelectCustomGun",
-                        Label = "W8",
-                        PositionOffset = new Vector2(120f, 160f),
-                        ScaleMultiplier = 1f,
-                        ApplyTint = false,
-                        OnClick = SelectCustomGun
-                    });
-
-                Log.LogInfo(
-                    "W8 selection button registered.");
+                weapon8Button = ULTRADROIDControls.AddButton(new ButtonConfig
+                {
+                    Id = "ULTRADROID.WeaponApi.SelectCustomGun",
+                    Label = "W8",
+                    PositionOffset = new Vector2(120f, 160f),
+                    ScaleMultiplier = 1f,
+                    ApplyTint = false,
+                    OnClick = SelectCustomGun
+                });
+                Log.LogInfo("W8 selection button registered.");
             }
-            catch (Exception ex)
-            {
-                Log.LogError(
-                    "Could not register the W8 button: " + ex);
-            }
+            catch (Exception ex) { Log.LogError("Could not register W8 button: " + ex); }
         }
 
         private void SelectCustomGun()
         {
             if (!WeaponGameRuntime.SelectWeapon("custom_gun"))
+                Log.LogWarning("Custom Gun is not ready in slot 8 yet.");
+        }
+
+        private void RegisterWeapon9Button()
+        {
+            try
             {
-                Log.LogWarning(
-                    "Custom Gun is not ready in slot 8 yet.");
+                weapon9Button = ULTRADROIDControls.AddButton(new ButtonConfig
+                {
+                    Id = "ULTRADROID.WeaponApi.SelectGoldRevolverTest",
+                    Label = "W9",
+                    PositionOffset = new Vector2(120f, 230f),
+                    ScaleMultiplier = 1f,
+                    ApplyTint = false,
+                    OnClick = SelectGoldRevolverTest
+                });
+                Log.LogInfo("W9 selection button registered.");
             }
+            catch (Exception ex) { Log.LogError("Could not register W9 button: " + ex); }
+        }
+
+        private void SelectGoldRevolverTest()
+        {
+            if (!WeaponGameRuntime.SelectWeapon("gold_revolver_test"))
+                Log.LogWarning("Gold Revolver Test is not ready in slot 9 yet.");
         }
 
         private void VerifyWeaponRegistration()
         {
-            if (!WeaponRegistry.TryGet(
-                "chaos_blades",
-                out WeaponDefinition registered))
-            {
-                Log.LogError(
-                    "Weapon registration verification failed.");
-                return;
-            }
-
-            Log.LogInfo(
-                "Verified weapon: " +
-                registered.DisplayName +
-                " (ID: " + registered.Id + ").");
-
-            Log.LogInfo(
-                "Variant count: " +
-                registered.Variants.Count);
-
-            Log.LogInfo(
-                "Legacy primary attack: " +
-                (registered.PrimaryAttack?.Id ?? "none"));
-
-            Log.LogInfo(
-                "Legacy alternate attack: " +
-                (registered.AlternateAttack?.Id ?? "none"));
-
-            VerifyVariant(registered, "standard");
-            VerifyVariant(registered, "heavy");
-            VerifyVariant(registered, "gold");
-
-            Log.LogInfo(
-                "Definition verification finished. " +
-                "Attack callbacks only log messages; they do not " +
-                "yet implement actual damage, projectiles, " +
-                "animation, or attack input.");
+            VerifyWeapon("chaos_blades", "blue", "green", "red", "black_blades");
+            VerifyWeapon("custom_gun", "pink", "purple", "white", "black_gun");
+            VerifyWeapon("gold_revolver_test", "gold");
+            Log.LogInfo("Definition verification finished. Attack callbacks are metadata only; they do not implement actual damage, projectiles, animations, or attack input.");
         }
 
-        private void VerifyVariant(
-            WeaponDefinition weapon,
-            string variantId)
+        private void VerifyWeapon(string weaponId, params string[] variantIds)
         {
-            WeaponVariantDefinition variant =
-                weapon.GetVariant(variantId);
-
-            if (variant == null)
+            if (!WeaponRegistry.TryGet(weaponId, out WeaponDefinition registered))
             {
-                Log.LogError(
-                    "Variant lookup failed: " + variantId);
+                Log.LogError("Weapon registration verification failed: " + weaponId);
                 return;
             }
+            Log.LogInfo("Verified weapon: " + registered.DisplayName + " (ID: " + registered.Id + "). Variant count: " + registered.Variants.Count);
+            Log.LogInfo("Legacy primary: " + (registered.PrimaryAttack?.Id ?? "none") + "; alternate: " + (registered.AlternateAttack?.Id ?? "none"));
+            foreach (string variantId in variantIds)
+                VerifyVariant(registered, variantId);
+        }
 
-            Log.LogInfo(
-                "Verified variant: " +
-                variant.DisplayName +
-                " (ID: " + variant.Id + ").");
-
-            Log.LogInfo(
-                "Variant color: " + variant.Color);
-
-            Log.LogInfo(
-                "Variant attack count: " +
-                variant.Attacks.Count);
-
-            foreach (WeaponAttackDefinition attack in variant.Attacks)
+        private void VerifyVariant(WeaponDefinition weapon, string variantId)
+        {
+            WeaponVariantDefinition variant = weapon.GetVariant(variantId);
+            if (variant == null)
             {
-                Log.LogInfo(
-                    "Attack: " + attack.Id +
-                    " | Kind: " + attack.Kind +
-                    " | Damage: " + attack.Damage +
-                    " | Range: " + attack.Range +
-                    " | Cooldown: " + attack.CooldownSeconds +
-                    "s | Projectile speed: " +
-                    attack.ProjectileSpeed);
+                Log.LogError("Variant lookup failed: " + weapon.Id + "/" + variantId);
+                return;
             }
+            Log.LogInfo("Verified variant: " + variant.DisplayName + " (ID: " + variant.Id + "); native color=" + variant.Color + "; custom tint=" + (variant.CustomTint.HasValue ? variant.CustomTint.Value.ToString() : "none") + "; attacks=" + variant.Attacks.Count);
+            foreach (WeaponAttackDefinition attack in variant.Attacks)
+                Log.LogInfo("Attack: " + attack.Id + " | Kind: " + attack.Kind + " | Damage: " + attack.Damage + " | Range: " + attack.Range + " | Cooldown: " + attack.CooldownSeconds + "s | Projectile speed: " + attack.ProjectileSpeed);
         }
     }
 }
