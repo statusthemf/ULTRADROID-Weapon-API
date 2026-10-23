@@ -38,7 +38,9 @@ namespace ULTRADROID.Weapon.API
             log = logger ?? (_ => { });
         }
 
-        public static void Start(Action<string> logger)
+        public static void Start(
+            Action<string> logger,
+            Action attachBehaviour)
         {
             if (current != null)
             {
@@ -48,15 +50,30 @@ namespace ULTRADROID.Weapon.API
 
             current = new WeaponGameRuntime(logger);
 
-            ClassInjector.RegisterTypeInIl2Cpp<WeaponGameRuntimeBehaviour>();
+            try
+            {
+                if (attachBehaviour == null)
+                    throw new ArgumentNullException(nameof(attachBehaviour));
 
-            GameObject host =
-                new GameObject("ULTRADROID_Weapon_API_Runtime");
+                ClassInjector.RegisterTypeInIl2Cpp<WeaponGameRuntimeBehaviour>();
 
-            UnityEngine.Object.DontDestroyOnLoad(host);
-            host.AddComponent<WeaponGameRuntimeBehaviour>();
+                // Let BepInEx attach the injected behaviour.
+                attachBehaviour();
 
-            current.Log("Runtime started; waiting for GunControl.");
+                current.Log(
+                    "Runtime behaviour attached through BepInEx."
+                );
+
+                current.Log(
+                    "Runtime started; waiting for GunControl."
+                );
+            }
+            catch (Exception ex)
+            {
+                current.Log("Runtime startup failed: " + ex);
+
+                current = null;
+            }
         }
 
         internal static void Tick()
@@ -1018,46 +1035,55 @@ namespace ULTRADROID.Weapon.API
 
     public sealed class WeaponGameRuntimeBehaviour : MonoBehaviour
     {
-        public WeaponGameRuntimeBehaviour(IntPtr ptr) : base(ptr) { }
+        private int diagnosticFrames;
+
+        public WeaponGameRuntimeBehaviour(IntPtr ptr)
+            : base(ptr)
+        {
+        }
 
         public void Awake()
         {
             WeaponGameRuntime.DebugLog(
-                "LIFECYCLE TEST: Awake");
+                "LIFECYCLE: Awake fired."
+            );
         }
 
         public void OnEnable()
         {
             WeaponGameRuntime.DebugLog(
-                "LIFECYCLE TEST: OnEnable");
+                "LIFECYCLE: OnEnable fired."
+            );
         }
 
         public void Start()
         {
             WeaponGameRuntime.DebugLog(
-                "LIFECYCLE TEST: Start");
+                "LIFECYCLE: Start fired."
+            );
         }
 
         public void Update()
         {
-            if (Time.frameCount % 120 == 0)
+            if (diagnosticFrames < 3)
+            {
+                diagnosticFrames++;
+
+                WeaponGameRuntime.DebugLog(
+                    "LIFECYCLE: Update fired; frame=" +
+                    Time.frameCount
+                );
+            }
+
+            if (Time.frameCount % 300 == 0)
             {
                 WeaponGameRuntime.DebugLog(
-                    "LIFECYCLE TEST: Update; frame=" +
-                    Time.frameCount);
+                    "Runtime heartbeat; frame=" +
+                    Time.frameCount
+                );
             }
-        }
 
-        public void OnDisable()
-        {
-            WeaponGameRuntime.DebugLog(
-                "LIFECYCLE TEST: OnDisable");
-        }
-
-        public void OnDestroy()
-        {
-            WeaponGameRuntime.DebugLog(
-                "LIFECYCLE TEST: OnDestroy");
+            WeaponGameRuntime.Tick();
         }
     }
 }
