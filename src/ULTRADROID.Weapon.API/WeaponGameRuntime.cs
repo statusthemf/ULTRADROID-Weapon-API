@@ -303,7 +303,7 @@ namespace ULTRADROID.Weapon.API
 
                 if (pointer == IntPtr.Zero)
                     return;
-
+                
                 if (pointer != gunControlPointer)
                 {
                     gunControlPointer = pointer;
@@ -312,9 +312,10 @@ namespace ULTRADROID.Weapon.API
                     IsInitialized = true;
 
                     ClearRegistrations();
-                    definitionsRegisteredForGunControl = false;
 
                     Log("Connected to initialized GunControl.");
+
+                    RegisterDefinitions();
                 }
                 else
                 {
@@ -322,8 +323,6 @@ namespace ULTRADROID.Weapon.API
                     GunControlInstance = found;
                     IsInitialized = true;
                 }
-
-                RegisterDefinitions();
                 definitionsRegisteredForGunControl = true;
             }
             catch (Exception ex)
