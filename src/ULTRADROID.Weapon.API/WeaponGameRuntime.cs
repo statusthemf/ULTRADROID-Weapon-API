@@ -441,7 +441,13 @@ namespace ULTRADROID.Weapon.API
                     }
                 }
 
-                if (!AssignDescriptor(prepared, displayName))
+                WeaponVariantColor baseColor =
+                    definition.Variants.Count > 0 &&
+                    definition.Variants[0] != null
+                        ? definition.Variants[0].Color
+                        : WeaponVariantColor.Default;
+
+                if (!AssignDescriptor(prepared, displayName, baseColor))
                 {
                     Log(
                         "Could not assign WeaponDescriptor to '" +
@@ -594,7 +600,8 @@ namespace ULTRADROID.Weapon.API
                     familyIndex = FindFamilyIndex(family, entry);
                 }
                 else if (entry != null &&
-                         !AssignDescriptor(entry, variant.DisplayName))
+                         !AssignDescriptor(
+                             entry, variant.DisplayName, variant.Color))
                 {
                     Log(
                         "Warning: descriptor update failed for variant '" +
@@ -657,7 +664,7 @@ namespace ULTRADROID.Weapon.API
                 prepared.SetActive(false);
 
                 if (!AssignDescriptor(
-                    prepared, variant.DisplayName))
+                    prepared, variant.DisplayName, variant.Color))
                 {
                     Log(
                         "Could not assign descriptor to variant '" +
@@ -839,7 +846,8 @@ namespace ULTRADROID.Weapon.API
 
         private static bool AssignDescriptor(
             GameObject weapon,
-            string displayName)
+            string displayName,
+            WeaponVariantColor color)
         {
             if (weapon == null ||
                 string.IsNullOrWhiteSpace(displayName))
@@ -901,6 +909,16 @@ namespace ULTRADROID.Weapon.API
                     descriptorsAlreadyMatch = false;
                     break;
                 }
+
+                // Default means preserve the template's native color. For an
+                // explicit color, ensure the existing descriptor already uses it.
+                if (color != WeaponVariantColor.Default &&
+                    !HasNativeVariantColor(
+                        existingDescriptor, color))
+                {
+                    descriptorsAlreadyMatch = false;
+                    break;
+                }
             }
 
             if (descriptorsAlreadyMatch)
@@ -931,6 +949,15 @@ namespace ULTRADROID.Weapon.API
                     GetMember(original, "glowIcon"));
             }
 
+            if (color != WeaponVariantColor.Default &&
+                !TrySetNativeVariantColor(descriptor, color))
+            {
+                Log(
+                    "Warning: could not set native variationColor to '" +
+                    color + "' for descriptor '" + displayName + "'.");
+                return false;
+            }
+
             if (!SetMember(
                 descriptor, "weaponName", displayName))
                 return false;
@@ -951,6 +978,110 @@ namespace ULTRADROID.Weapon.API
             }
 
             return assigned > 0;
+        }
+
+        private static bool HasNativeVariantColor(
+            object descriptor,
+            WeaponVariantColor requestedColor)
+        {
+            object currentColor = GetMember(
+                descriptor, "variationColor");
+
+            if (currentColor == null)
+                return false;
+
+            try
+            {
+                return Convert.ToInt32(currentColor) ==
+                    (int)requestedColor;
+            }
+            catch
+            {
+                return string.Equals(
+                    Convert.ToString(currentColor),
+                    requestedColor.ToString(),
+                    StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        private static bool TrySetNativeVariantColor(
+            object descriptor,
+            WeaponVariantColor requestedColor)
+        {
+            if (descriptor == null)
+                return false;
+
+            Type descriptorType = descriptor.GetType();
+
+            for (Type type = descriptorType;
+                type != null;
+                type = type.BaseType)
+            {
+                FieldInfo field = type.GetField(
+                    "variationColor",
+                    BindingFlags.Instance |
+                    BindingFlags.Public |
+                    BindingFlags.NonPublic |
+                    BindingFlags.DeclaredOnly);
+
+                if (field != null)
+                {
+                    try
+                    {
+                        object value = ConvertColorValue(
+                            field.FieldType, requestedColor);
+
+                        field.SetValue(descriptor, value);
+                        return true;
+                    }
+                    catch { }
+                }
+
+                PropertyInfo property = type.GetProperty(
+                    "variationColor",
+                    BindingFlags.Instance |
+                    BindingFlags.Public |
+                    BindingFlags.NonPublic |
+                    BindingFlags.DeclaredOnly);
+
+                if (property != null &&
+                    property.GetIndexParameters().Length == 0)
+                {
+                    MethodInfo setter = property.GetSetMethod(true);
+
+                    if (setter != null)
+                    {
+                        try
+                        {
+                            object value = ConvertColorValue(
+                                property.PropertyType, requestedColor);
+
+                            property.SetValue(descriptor, value, null);
+                            return true;
+                        }
+                        catch { }
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static object ConvertColorValue(
+            Type nativeType,
+            WeaponVariantColor requestedColor)
+        {
+            if (nativeType.IsEnum)
+            {
+                return Enum.ToObject(
+                    nativeType, (int)requestedColor);
+            }
+
+            Type underlying = Nullable.GetUnderlyingType(nativeType)
+                ?? nativeType;
+
+            return Convert.ChangeType(
+                (int)requestedColor, underlying);
         }
 
         private static object CreateDescriptor(Type descriptorType)
