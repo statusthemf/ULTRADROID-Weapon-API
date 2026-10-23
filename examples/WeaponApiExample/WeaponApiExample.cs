@@ -10,7 +10,7 @@ namespace ULTRADROID.WeaponApiExample
     [BepInPlugin(
         "somerandommaid.ultradroid.weaponapiexample",
         "ULTRADROID Weapon API Example",
-        "1.3.2")]
+        "1.3.3")]
     [BepInDependency(
         ULTRADROIDControls.PluginGuid,
         BepInDependency.DependencyFlags.HardDependency)]
@@ -61,6 +61,7 @@ namespace ULTRADROID.WeaponApiExample
                 {
                     Color = WeaponVariantColor.Blue,
                     CustomTint = new Color(0.10f, 0.35f, 1.0f),
+                    IconTint = new Color(0.10f, 0.35f, 1.0f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "blue_chain_slash", WeaponAttackKind.Melee)
                     {
@@ -109,6 +110,7 @@ namespace ULTRADROID.WeaponApiExample
                 {
                     Color = WeaponVariantColor.Green,
                     CustomTint = new Color(0.10f, 1.0f, 0.20f),
+                    IconTint = new Color(0.10f, 1.0f, 0.20f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "green_chain_slash", WeaponAttackKind.Melee)
                     {
@@ -157,6 +159,7 @@ namespace ULTRADROID.WeaponApiExample
                 {
                     Color = WeaponVariantColor.Red,
                     CustomTint = new Color(1.0f, 0.08f, 0.08f),
+                    IconTint = new Color(1.0f, 0.08f, 0.08f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "red_chain_slash", WeaponAttackKind.Melee)
                     {
@@ -205,6 +208,7 @@ namespace ULTRADROID.WeaponApiExample
                 {
                     Color = WeaponVariantColor.Default,
                     CustomTint = new Color(0.025f, 0.025f, 0.035f),
+                    IconTint = new Color(0.025f, 0.025f, 0.035f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "black_chain_slash", WeaponAttackKind.Melee)
                     {
@@ -269,6 +273,7 @@ namespace ULTRADROID.WeaponApiExample
                 {
                     Color = WeaponVariantColor.Default,
                     CustomTint = new Color(1.0f, 0.15f, 0.55f),
+                    IconTint = new Color(1.0f, 0.15f, 0.55f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "pink_primary", WeaponAttackKind.Projectile)
                     {
@@ -317,6 +322,7 @@ namespace ULTRADROID.WeaponApiExample
                 {
                     Color = WeaponVariantColor.Default,
                     CustomTint = new Color(0.55f, 0.12f, 0.95f),
+                    IconTint = new Color(0.55f, 0.12f, 0.95f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "purple_primary", WeaponAttackKind.Projectile)
                     {
@@ -365,6 +371,7 @@ namespace ULTRADROID.WeaponApiExample
                 {
                     Color = WeaponVariantColor.Default,
                     CustomTint = new Color(1.0f, 1.0f, 1.0f),
+                    IconTint = new Color(1.0f, 1.0f, 1.0f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "white_primary", WeaponAttackKind.Projectile)
                     {
@@ -413,6 +420,7 @@ namespace ULTRADROID.WeaponApiExample
                 {
                     Color = WeaponVariantColor.Default,
                     CustomTint = new Color(0.025f, 0.025f, 0.035f),
+                    IconTint = new Color(0.025f, 0.025f, 0.035f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "black_gun_primary", WeaponAttackKind.Projectile)
                     {
@@ -462,22 +470,23 @@ namespace ULTRADROID.WeaponApiExample
             Log.LogInfo("Custom Gun variant count: " + customGun.Variants.Count);
         }
 
-        // This is a separate slot-9 clone test. It does not append a variant
-        // to the vanilla Revolver family, because slots 1-6 remain protected.
+        // This registers Gold as an additional variant in the existing vanilla
+        // Revolver family (native slot 1), after its current variants.
         private void RegisterGoldRevolverTest()
         {
             WeaponDefinition goldRevolver = new WeaponDefinition(
-                "gold_revolver_test", "Gold Revolver Test")
+                "gold_revolver_test", "Vanilla Revolver Gold Extension")
             {
                 Category = "Ranged",
-                PreferredSlot = 9
+                ExtendExistingSlot = 1
             };
 
             WeaponVariantDefinition gold =
-                new WeaponVariantDefinition("gold", "Gold Revolver Test")
+                new WeaponVariantDefinition("gold", "Gold Revolver")
                 {
                     Color = WeaponVariantColor.Gold,
                     CustomTint = new Color(1.0f, 0.62f, 0.08f),
+                    IconTint = new Color(1.0f, 0.62f, 0.08f),
                     PrimaryAttack = new WeaponAttackDefinition(
                         "gold_revolver_primary", WeaponAttackKind.Projectile)
                     {
@@ -523,7 +532,7 @@ namespace ULTRADROID.WeaponApiExample
             goldRevolver.PrimaryAttack = gold.PrimaryAttack;
             goldRevolver.AlternateAttack = gold.AlternateAttack;
             WeaponRegistry.Register(goldRevolver);
-            Log.LogInfo("Registered Gold Revolver Test clone in slot 9; vanilla Revolver family unchanged.");
+            Log.LogInfo("Registered Gold as an additional variant in the vanilla Revolver family (slot 1); no separate slot-9 clone.");
         }
 
         private void StartWeaponRuntime()
@@ -591,7 +600,7 @@ namespace ULTRADROID.WeaponApiExample
                 weapon9Button = ULTRADROIDControls.AddButton(new ButtonConfig
                 {
                     Id = "ULTRADROID.WeaponApi.SelectGoldRevolverTest",
-                    Label = "W9",
+                    Label = "Gold",
                     PositionOffset = new Vector2(120f, 230f),
                     ScaleMultiplier = 1f,
                     ApplyTint = false,
@@ -604,8 +613,8 @@ namespace ULTRADROID.WeaponApiExample
 
         private void SelectGoldRevolverTest()
         {
-            if (!WeaponGameRuntime.SelectWeapon("gold_revolver_test"))
-                Log.LogWarning("Gold Revolver Test is not ready in slot 9 yet.");
+            if (!WeaponGameRuntime.SelectVariant("gold_revolver_test", "gold"))
+                Log.LogWarning("Gold Revolver variant is not ready in the vanilla Revolver family yet.");
         }
 
         private void VerifyWeaponRegistration()
