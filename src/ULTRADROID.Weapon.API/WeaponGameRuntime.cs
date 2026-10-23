@@ -608,6 +608,11 @@ namespace ULTRADROID.Weapon.API
                         variant.Id + "'.");
                 }
 
+                if (entry != null && variant.CustomTint.HasValue)
+                {
+                    ApplyCustomTint(entry, variant.CustomTint.Value);
+                }
+
                 if (entry == null || familyIndex < 0)
                 {
                     Log(
@@ -842,6 +847,59 @@ namespace ULTRADROID.Weapon.API
             }
 
             return null;
+        }
+
+
+        // Custom tints are deliberately independent of the native
+        // WeaponVariant enum. This avoids sending unsupported enum values
+        // (such as Pink or Black) into the game's indexed color arrays.
+        private static void ApplyCustomTint(GameObject weapon, Color tint)
+        {
+            if (weapon == null)
+                return;
+
+            try
+            {
+                Renderer[] renderers = weapon.GetComponentsInChildren<Renderer>(true);
+                int tinted = 0;
+
+                foreach (Renderer renderer in renderers)
+                {
+                    if (renderer == null)
+                        continue;
+
+                    Material[] materials = renderer.materials;
+                    bool changed = false;
+
+                    for (int i = 0; i < materials.Length; i++)
+                    {
+                        Material material = materials[i];
+                        if (material == null)
+                            continue;
+
+                        if (material.HasProperty("_Color"))
+                        {
+                            material.color = tint;
+                            changed = true;
+                        }
+                        else if (material.HasProperty("_BaseColor"))
+                        {
+                            material.SetColor("_BaseColor", tint);
+                            changed = true;
+                        }
+                    }
+
+                    if (changed)
+                        tinted++;
+                }
+
+                if (tinted == 0)
+                    DebugLog("Custom tint could not find a supported material color property on '" + weapon.name + "'.");
+            }
+            catch (Exception ex)
+            {
+                DebugLog("Custom tint failed for '" + weapon.name + "': " + Unwrap(ex));
+            }
         }
 
         private static bool AssignDescriptor(
