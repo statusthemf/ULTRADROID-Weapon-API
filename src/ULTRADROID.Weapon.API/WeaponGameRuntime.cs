@@ -148,11 +148,10 @@ namespace ULTRADROID.Weapon.API
             }
         }
 
-        /// **Summary:**
-
+        /// <summary>
         /// Selects a registered custom variant by ID.
         /// The index is resolved from the actual native family list.
-        /// 
+        /// </summary>
         public static bool SelectVariant(
             string weaponId,
             string variantId)
@@ -258,10 +257,19 @@ namespace ULTRADROID.Weapon.API
                 {
                     Log("HUD icon tint update failed: " + Unwrap(ex));
                 }
+
+                try
+                {
+                    UpdateEquippedHudTint();
+                }
+                catch (Exception ex)
+                {
+                    Log("Equipped HUD tint update failed: " + Unwrap(ex));
+                }
             }
 
             // Keep the existing, slower GunControl discovery interval.
-            if (Time.frameCount - lastScanFrame < 60)
+            if (Time.frameCount - lastScanFrame < 10)
                 return;
 
             lastScanFrame = Time.frameCount;
@@ -315,11 +323,8 @@ namespace ULTRADROID.Weapon.API
                     IsInitialized = true;
                 }
 
-                if (!definitionsRegisteredForGunControl)
-                {
-                    RegisterDefinitions();
-                    definitionsRegisteredForGunControl = true;
-                }
+                RegisterDefinitions();
+                definitionsRegisteredForGunControl = true;
             }
             catch (Exception ex)
             {
@@ -1103,6 +1108,101 @@ namespace ULTRADROID.Weapon.API
             }
         }
 
+        private void UpdateEquippedHudTint()
+        {
+            if (gunControl == null)
+                return;
+
+            GameObject currentWeapon =
+                GetMember(gunControl, "currentWeapon") as GameObject;
+
+            if (currentWeapon == null)
+                return;
+
+            Type iconType = FindType("WeaponIcon");
+            if (iconType == null)
+                return;
+
+            object icons = currentWeapon.GetComponentsInChildren(
+                Il2CppType.From(iconType), true);
+
+            string displayName = null;
+
+            for (int i = 0; i < Count(icons); i++)
+            {
+                object icon = WrapInstance(iconType, Item(icons, i));
+                if (icon == null)
+                    continue;
+
+                object descriptor = GetMember(icon, "weaponDescriptor");
+                string name = Convert.ToString(
+                    GetMember(descriptor, "weaponName"));
+
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    displayName = name;
+                    break;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(displayName))
+                return;
+
+            Color? tint = null;
+
+            foreach (WeaponDefinition definition in WeaponRegistry.GetAll())
+            {
+                if (definition == null)
+                    continue;
+
+                foreach (WeaponVariantDefinition variant in definition.Variants)
+                {
+                    if (variant == null ||
+                        !string.Equals(
+                            displayName,
+                            variant.DisplayName,
+                            StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    tint = variant.IconTint
+                        ?? variant.ModelTint
+                        ?? variant.CustomTint;
+
+                    if (tint.HasValue)
+                        break;
+                }
+
+                if (tint.HasValue)
+                    break;
+            }
+
+            if (!tint.HasValue)
+                return;
+
+            Type hudType = FindType("WeaponHUD");
+            if (hudType == null)
+                return;
+
+            object huds = UnityEngine.Object.FindObjectsOfType(
+                Il2CppType.From(hudType));
+
+            for (int i = 0; i < Count(huds); i++)
+            {
+                object hud = WrapInstance(hudType, Item(huds, i));
+                if (hud == null)
+                    continue;
+
+                object image = GetMember(hud, "img");
+                object glowImage = GetMember(hud, "glowImg");
+
+                if (image != null)
+                    SetMember(image, "color", tint.Value);
+
+                if (glowImage != null)
+                    SetMember(glowImage, "color", tint.Value);
+            }
+        }
+
         private void UpdateWheelTints()
         {
             Type wheelType = FindType("WeaponWheel");
@@ -1676,7 +1776,6 @@ namespace ULTRADROID.Weapon.API
 
                 if (slots == null ||
                     Count(slots) < 6 ||
-                    !HasPopulatedVanillaSlots(slots) ||
                     GetPointer(candidate) == IntPtr.Zero)
                     continue;
 
@@ -1690,43 +1789,7 @@ namespace ULTRADROID.Weapon.API
 
         private static bool HasPopulatedVanillaSlots(object slots)
         {
-            if (slots == null || Count(slots) < 6)
-                return false;
-
-            for (int i = 0; i < 6; i++)
-            {
-                object family = Item(slots, i);
-
-                if (family == null || Count(family) == 0)
-                    return false;
-
-                bool foundVanilla = false;
-
-                for (int j = 0; j < Count(family); j++)
-                {
-                    GameObject weapon =
-                        Item(family, j) as GameObject;
-
-                    if (weapon == null)
-                        continue;
-
-                    if (weapon.name.StartsWith(
-                            "ULTRADROID_WEAPON_",
-                            StringComparison.Ordinal) ||
-                        weapon.name.StartsWith(
-                            "ULTRADROID_VARIANT_",
-                            StringComparison.Ordinal))
-                        continue;
-
-                    foundVanilla = true;
-                    break;
-                }
-
-                if (!foundVanilla)
-                    return false;
-            }
-
-            return true;
+            return slots != null && Count(slots) >= 6;
         }
 
         private static Type FindType(string name)
