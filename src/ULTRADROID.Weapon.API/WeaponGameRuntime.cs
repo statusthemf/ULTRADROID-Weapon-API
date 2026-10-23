@@ -988,6 +988,8 @@ namespace ULTRADROID.Weapon.API
 
     public sealed class WeaponGameRuntimeBehaviour : MonoBehaviour
     {
+        private int diagnosticFrames;
+
         public WeaponGameRuntimeBehaviour(IntPtr ptr) : base(ptr) { }
 
         public void Awake()
@@ -1010,6 +1012,17 @@ namespace ULTRADROID.Weapon.API
 
         public void Update()
         {
+            diagnosticFrames++;
+
+            if (diagnosticFrames == 1 ||
+                diagnosticFrames % 120 == 0)
+            {
+                WeaponGameRuntime.DebugLog(
+                    "DIAGNOSTIC: Update fired; count = " +
+                    diagnosticFrames +
+                    ", Unity frame = " + Time.frameCount);
+            }
+
             WeaponGameRuntime.Tick();
         }
     }
