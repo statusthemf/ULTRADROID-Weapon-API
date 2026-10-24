@@ -76,7 +76,7 @@ namespace ULTRADROID.WeaponApiExample
                 Model = CreateModel(
                     "ULTRADROID_BLADES_OF_CHAOS.glb",
                     new Vector3(0f, 0f, 1f),
-                    new Vector3(90f, 0f, 0f),
+                    new Vector3(90f, 0f, -90f),
                     new Vector3(150f, 150f, 150f))
             };
 
@@ -311,8 +311,8 @@ namespace ULTRADROID.WeaponApiExample
                 Model = CreateModel(
                     "ULTRADROID_CUSTOM_GUN.glb",
                     new Vector3(0f, 0f, 1f),
-                    new Vector3(90f, 0f, 0f),
-                    new Vector3(150f, 150f, 150f))
+                    new Vector3(0f, 0f, 0f),
+                    new Vector3(1f, 1f, 1f))
             };
 
             WeaponVariantDefinition pink =
