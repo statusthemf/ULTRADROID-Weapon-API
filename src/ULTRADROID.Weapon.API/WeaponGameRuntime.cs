@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
+using BepInEx;
 using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.InteropTypes;
 using Il2CppInterop.Runtime.Injection;
+using ULTRADROID.Models;
 using UnityEngine;
 
 namespace ULTRADROID.Weapon.API
@@ -471,6 +474,11 @@ namespace ULTRADROID.Weapon.API
                         familyIndex = FindFamilyIndex(family, entry);
                     }
 
+                    ApplyModelVisual(
+                        entry,
+                        variant.Model ?? definition.Model,
+                        definition.Id + "/" + variant.Id);
+
                     Color? modelTint = variant.ModelTint ?? variant.CustomTint;
                     if (modelTint.HasValue) ApplyCustomTint(entry, modelTint.Value);
                     if (variant.IconTint.HasValue) ApplyIconTint(entry, variant.IconTint.Value);
@@ -514,6 +522,85 @@ namespace ULTRADROID.Weapon.API
                 candidate++;
 
             return candidate;
+        }
+
+        private void ApplyModelVisual(
+            GameObject weapon,
+            WeaponModelDefinition model,
+            string ownerId)
+        {
+            if (weapon == null || model == null ||
+                string.IsNullOrWhiteSpace(model.Path))
+                return;
+
+            GameObject loadedModel = null;
+
+            try
+            {
+                string modelPath = model.Path;
+
+                if (!System.IO.Path.IsPathRooted(modelPath))
+                    modelPath = System.IO.Path.Combine(
+                        Paths.PluginPath, modelPath);
+
+                if (!File.Exists(modelPath))
+                {
+                    Log("Custom model not found: " + modelPath);
+                    return;
+                }
+
+                ModelLoadOptions options = new ModelLoadOptions
+                {
+                    Name = "ULTRADROID_Model_" + SafeName(ownerId),
+                    Position = model.Position,
+                    RotationEuler = model.RotationEuler,
+                    Scale = model.Scale,
+                    LoadTextures = model.LoadTextures,
+                    CreateColliders = model.CreateColliders
+                };
+
+                loadedModel = ModelAPI.LoadGLB(
+                    modelPath, weapon.transform, options);
+
+                if (loadedModel == null)
+                {
+                    Log("ModelAPI.LoadGLB returned null: " + ownerId);
+                    return;
+                }
+
+                loadedModel.SetActive(true);
+
+                if (model.HideTemplateMeshes)
+                {
+                    Renderer[] renderers =
+                        weapon.GetComponentsInChildren<Renderer>(true);
+
+                    foreach (Renderer renderer in renderers)
+                    {
+                        if (renderer == null)
+                            continue;
+
+                        Transform rt = renderer.transform;
+                        Transform mt = loadedModel.transform;
+
+                        if (rt == mt || rt.IsChildOf(mt))
+                            continue;
+
+                        if (renderer is MeshRenderer ||
+                            renderer is SkinnedMeshRenderer)
+                            renderer.enabled = false;
+                    }
+                }
+
+                Log("Applied custom model: " + ownerId);
+            }
+            catch (Exception ex)
+            {
+                Log("Custom model failed: " + Unwrap(ex));
+
+                if (loadedModel != null)
+                    UnityEngine.Object.Destroy(loadedModel);
+            }
         }
 
         private bool TryCreateBaseWeapon(
@@ -571,6 +658,11 @@ namespace ULTRADROID.Weapon.API
                     definition.Variants[0] != null
                         ? definition.Variants[0].Color
                         : WeaponVariantColor.Default;
+
+                ApplyModelVisual(
+                    prepared,
+                    definition.Model,
+                    definition.Id);
 
                 if (!AssignDescriptor(prepared, displayName, baseColor))
                 {
@@ -735,6 +827,11 @@ namespace ULTRADROID.Weapon.API
 
                 if (entry != null)
                 {
+                    ApplyModelVisual(
+                        entry,
+                        variant.Model ?? definition.Model,
+                        definition.Id + "/" + variant.Id);
+
                     Color? modelTint = variant.ModelTint ?? variant.CustomTint;
                     if (modelTint.HasValue)
                         ApplyCustomTint(entry, modelTint.Value);
