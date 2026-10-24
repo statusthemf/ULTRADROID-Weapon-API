@@ -20,6 +20,11 @@
       <Private>false</Private>
     </Reference>
 
+    <Reference Include="ULTRADROID.Models">
+      <HintPath>../../lib/ULTRADROID.Models.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
     <Reference Include="BepInEx.Unity.IL2CPP">
       <HintPath>../../lib/BepInEx.Unity.IL2CPP.dll</HintPath>
       <Private>false</Private>
