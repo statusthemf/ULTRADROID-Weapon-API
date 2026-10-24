@@ -14,9 +14,20 @@ namespace ULTRADROID.Weapon.API
         Red = 2,
         Gold = 3
     }
+    public sealed class WeaponModelDefinition
+    {
+        public string Path { get; set; }
+        public Vector3 Position { get; set; } = Vector3.zero;
+        public Vector3 RotationEuler { get; set; } = Vector3.zero;
+        public Vector3 Scale { get; set; } = Vector3.one;
+        public bool LoadTextures { get; set; } = true;
+        public bool CreateColliders { get; set; } = false;
+        public bool HideTemplateMeshes { get; set; } = true;
+    }
 
     public sealed class WeaponDefinition
     {
+        public WeaponModelDefinition Model { get; set; }
         private readonly List<WeaponVariantDefinition> variants =
             new List<WeaponVariantDefinition>();
 
@@ -30,6 +41,7 @@ namespace ULTRADROID.Weapon.API
         public string DisplayName { get; set; }
         public string Category { get; set; }
         public int PreferredSlot { get; set; }
+        public WeaponModelDefinition Model { get; set; }
 
         // Optional existing native family slot to extend (1-6).
         // Leave -1 for a normal custom weapon in slot 7 or higher.
