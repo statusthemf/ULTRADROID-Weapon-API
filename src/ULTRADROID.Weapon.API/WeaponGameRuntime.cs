@@ -151,10 +151,11 @@ namespace ULTRADROID.Weapon.API
             }
         }
 
-        /// <summary>
+        /// **Summary:**
+
         /// Selects a registered custom variant by ID.
         /// The index is resolved from the actual native family list.
-        /// </summary>
+        /// 
         public static bool SelectVariant(
             string weaponId,
             string variantId)
@@ -533,15 +534,30 @@ namespace ULTRADROID.Weapon.API
                 string.IsNullOrWhiteSpace(model.Path))
                 return;
 
+            string modelObjectName =
+                "ULTRADROID_Model_" + SafeName(ownerId);
+
+            Transform existing = weapon.transform.Find(modelObjectName);
+
+            // Don't load the same model onto the same weapon entry twice.
+            if (existing != null)
+            {
+                existing.gameObject.SetActive(true);
+                return;
+            }
+
             GameObject loadedModel = null;
 
             try
             {
                 string modelPath = model.Path;
 
-                if (!System.IO.Path.IsPathRooted(modelPath))
-                    modelPath = System.IO.Path.Combine(
-                        Paths.PluginPath, modelPath);
+                if (!Path.IsPathRooted(modelPath))
+                {
+                    modelPath = Path.Combine(
+                        Paths.PluginPath,
+                        modelPath);
+                }
 
                 if (!File.Exists(modelPath))
                 {
@@ -551,7 +567,7 @@ namespace ULTRADROID.Weapon.API
 
                 ModelLoadOptions options = new ModelLoadOptions
                 {
-                    Name = "ULTRADROID_Model_" + SafeName(ownerId),
+                    Name = modelObjectName,
                     Position = model.Position,
                     RotationEuler = model.RotationEuler,
                     Scale = model.Scale,
@@ -559,8 +575,12 @@ namespace ULTRADROID.Weapon.API
                     CreateColliders = model.CreateColliders
                 };
 
+                Log("Loading custom model: " + ownerId);
+
                 loadedModel = ModelAPI.LoadGLB(
-                    modelPath, weapon.transform, options);
+                    modelPath,
+                    weapon.transform,
+                    options);
 
                 if (loadedModel == null)
                 {
@@ -568,6 +588,7 @@ namespace ULTRADROID.Weapon.API
                     return;
                 }
 
+                loadedModel.name = modelObjectName;
                 loadedModel.SetActive(true);
 
                 if (model.HideTemplateMeshes)
@@ -588,7 +609,9 @@ namespace ULTRADROID.Weapon.API
 
                         if (renderer is MeshRenderer ||
                             renderer is SkinnedMeshRenderer)
+                        {
                             renderer.enabled = false;
+                        }
                     }
                 }
 
@@ -658,11 +681,6 @@ namespace ULTRADROID.Weapon.API
                     definition.Variants[0] != null
                         ? definition.Variants[0].Color
                         : WeaponVariantColor.Default;
-
-                ApplyModelVisual(
-                    prepared,
-                    definition.Model,
-                    definition.Id);
 
                 if (!AssignDescriptor(prepared, displayName, baseColor))
                 {
@@ -749,6 +767,19 @@ namespace ULTRADROID.Weapon.API
                 return;
             }
 
+            if (definition.Variants == null ||
+                definition.Variants.Count == 0)
+            {
+                variantIndices.Remove(definition.Id);
+
+                ApplyModelVisual(
+                    baseWeapon,
+                    definition.Model,
+                    definition.Id);
+
+                return;
+            }
+
             if (!variantIndices.TryGetValue(
                 definition.Id,
                 out Dictionary<string, int> indices))
@@ -759,9 +790,6 @@ namespace ULTRADROID.Weapon.API
                 variantIndices[definition.Id] = indices;
             }
 
-            // Keep the previous map only to identify real index changes. Rebuild
-            // the live map each scan so removed/failed variants cannot leave stale
-            // IDs pointing at the wrong native entry.
             Dictionary<string, int> previousIndices =
                 new Dictionary<string, int>(
                     indices,
@@ -769,15 +797,11 @@ namespace ULTRADROID.Weapon.API
 
             indices.Clear();
 
-            if (definition.Variants == null ||
-                definition.Variants.Count == 0)
-            {
-                variantIndices.Remove(definition.Id);
-                return;
-            }
+            var entries =
+                new List<Tuple<WeaponVariantDefinition, GameObject>>();
 
-            // The first declared variant uses the base entry.
-            // Additional variants receive independent native entries.
+            // First create and register every variant entry.
+            // No GLB models are loaded during this pass.
             for (int i = 0; i < definition.Variants.Count; i++)
             {
                 WeaponVariantDefinition variant =
@@ -790,14 +814,16 @@ namespace ULTRADROID.Weapon.API
                 string entryName = i == 0
                     ? BaseWeaponName(definition.Id)
                     : VariantWeaponName(
-                        definition.Id, variant.Id);
+                        definition.Id,
+                        variant.Id);
 
                 GameObject entry = FindInFamily(
-                    family, entryName, out int familyIndex);
+                    family,
+                    entryName,
+                    out int familyIndex);
 
                 if (entry == null && i == 0)
                 {
-                    // The base entry may have been created before variant support.
                     entry = baseWeapon;
                     familyIndex = FindFamilyIndex(family, entry);
                 }
@@ -816,27 +842,17 @@ namespace ULTRADROID.Weapon.API
 
                     familyIndex = FindFamilyIndex(family, entry);
                 }
-                else if (entry != null &&
-                         !AssignDescriptor(
-                             entry, variant.DisplayName, variant.Color))
+                else if (entry != null)
                 {
-                    Log(
-                        "Warning: descriptor update failed for variant '" +
-                        variant.Id + "'.");
-                }
-
-                if (entry != null)
-                {
-                    ApplyModelVisual(
+                    if (!AssignDescriptor(
                         entry,
-                        variant.Model ?? definition.Model,
-                        definition.Id + "/" + variant.Id);
-
-                    Color? modelTint = variant.ModelTint ?? variant.CustomTint;
-                    if (modelTint.HasValue)
-                        ApplyCustomTint(entry, modelTint.Value);
-                    if (variant.IconTint.HasValue)
-                        ApplyIconTint(entry, variant.IconTint.Value);
+                        variant.DisplayName,
+                        variant.Color))
+                    {
+                        Log(
+                            "Warning: descriptor update failed for variant '" +
+                            variant.Id + "'.");
+                    }
                 }
 
                 if (entry == null || familyIndex < 0)
@@ -849,14 +865,45 @@ namespace ULTRADROID.Weapon.API
 
                 indices[variant.Id] = familyIndex;
 
+                entries.Add(
+                    Tuple.Create(variant, entry));
+
                 if (!previousIndices.TryGetValue(
-                    variant.Id, out int previousIndex) ||
+                    variant.Id,
+                    out int previousIndex) ||
                     previousIndex != familyIndex)
                 {
                     Log(
                         "Variant '" + definition.Id + "/" + variant.Id +
-                        "' maps to native family index " + familyIndex + ".");
+                        "' maps to native family index " +
+                        familyIndex + ".");
                 }
+            }
+
+            // Second apply models, after all entries have been created.
+            // This prevents newly cloned variants from inheriting a model
+            // that was already attached to the base weapon.
+            foreach (Tuple<WeaponVariantDefinition, GameObject> item in entries)
+            {
+                WeaponVariantDefinition variant = item.Item1;
+                GameObject entry = item.Item2;
+
+                WeaponModelDefinition resolvedModel =
+                    variant.Model ?? definition.Model;
+
+                ApplyModelVisual(
+                    entry,
+                    resolvedModel,
+                    definition.Id + "/" + variant.Id);
+
+                Color? modelTint =
+                    variant.ModelTint ?? variant.CustomTint;
+
+                if (modelTint.HasValue)
+                    ApplyCustomTint(entry, modelTint.Value);
+
+                if (variant.IconTint.HasValue)
+                    ApplyIconTint(entry, variant.IconTint.Value);
             }
 
             foreach (KeyValuePair<string, int> previous in previousIndices)
